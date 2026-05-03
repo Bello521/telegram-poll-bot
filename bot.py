@@ -143,14 +143,20 @@ def scheduler_thread(bot):
 
     async def run_all():
         for match in MATCH_SCHEDULE:
-            await create_poll_auto(bot, match)
-            await close_poll_auto(bot, match)
+            try:
+                await create_poll_auto(bot, match)
+                await close_poll_auto(bot, match)
+            except Exception as e:
+                print(f"❌ Error in match {match['match_no']}:", e)
 
     while True:
-        print("🔁 Scheduler running...")
-        loop.run_until_complete(run_all())
-        time.sleep(20)   # faster checks
+        try:
+            print("🔁 Scheduler running...")
+            loop.run_until_complete(run_all())
+        except Exception as e:
+            print("❌ Scheduler crashed:", e)
 
+        time.sleep(20)
 
 # ================== COMMANDS ==================
 
