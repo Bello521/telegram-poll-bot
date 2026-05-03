@@ -51,6 +51,7 @@ MATCH_SCHEDULE = generate_mock_schedule()
 
 # ================== AUTO FUNCTIONS ==================
 
+print(f"🟢 Create check for {match['match_no']}")
 async def create_poll_auto(bot, match):
     data = load_data()
     match_no = match["match_no"]
@@ -104,6 +105,7 @@ async def create_poll_auto(bot, match):
         print("Create error:", e)
 
 
+
 async def close_poll_auto(bot, match):
     data = load_data()
     match_no = match["match_no"]
@@ -138,25 +140,25 @@ async def close_poll_auto(bot, match):
 # ================== SCHEDULER ==================
 
 def scheduler_thread(bot):
+    print("🚀 Scheduler thread STARTED")  # MUST PRINT
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     async def run_all():
         for match in MATCH_SCHEDULE:
-            try:
-                await create_poll_auto(bot, match)
-                await close_poll_auto(bot, match)
-            except Exception as e:
-                print(f"❌ Error in match {match['match_no']}:", e)
+            print(f"🔍 Checking match {match['match_no']}")  # MUST PRINT
+            await create_poll_auto(bot, match)
+            await close_poll_auto(bot, match)
 
     while True:
         try:
             print("🔁 Scheduler running...")
             loop.run_until_complete(run_all())
         except Exception as e:
-            print("❌ Scheduler crashed:", e)
+            print("❌ Scheduler error:", e)
 
-        time.sleep(20)
+        time.sleep(10)
 
 # ================== COMMANDS ==================
 
