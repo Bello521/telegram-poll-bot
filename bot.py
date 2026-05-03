@@ -241,19 +241,16 @@ async def leaderboard(update, context):
 
 # ================== RUN ==================
 
-import os
-TOKEN = os.getenv("TOKEN")
+from telegram.ext import Updater, CommandHandler, PollAnswerHandler
 
-app = Application.builder().token(TOKEN).build()
+updater = Updater(TOKEN, use_context=True)
+dispatcher = updater.dispatcher
 
-app.add_handler(CommandHandler("update", update_result))
-app.add_handler(CommandHandler("leaderboard", leaderboard))
-app.add_handler(PollAnswerHandler(handle_vote))
+dispatcher.add_handler(CommandHandler("update", update_result))
+dispatcher.add_handler(CommandHandler("leaderboard", leaderboard))
+dispatcher.add_handler(PollAnswerHandler(handle_vote))
 
-bot = Bot(TOKEN)
+print("Bot running (v13 compatible)...")
 
-threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
-
-print("Bot running clean version...")
-
-app.run_polling()
+updater.start_polling()
+updater.idle()
