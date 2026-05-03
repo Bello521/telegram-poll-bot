@@ -26,6 +26,8 @@ DATA_FILE = "data.json"
 
 # ================== DATA ==================
 
+DATA_FILE = "data.json"
+
 def load_data():
     try:
         with open(DATA_FILE, "r") as f:
@@ -33,23 +35,24 @@ def load_data():
     except:
         return {"users": {}, "polls": {}}
 
-
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
 
 
-# ================== MOCK MATCH SCHEDULE ==================
+# ================== MATCH SCHEDULE (2 MATCH TEST) ==================
+
+from datetime import datetime, timedelta
 
 def generate_mock_schedule():
-    teams = ["SRH", "PBKS", "RCB", "RR", "DC", "GT", "CSK", "LSG", "KKR", "MI"]
+    teams = ["SRH", "PBKS", "RCB", "RR"]
 
-    now = datetime.now() - timedelta(minutes=1)  # 🔥 force immediate start
+    now = datetime.now() - timedelta(minutes=1)  # start immediately
 
     schedule = []
-    match_no = 16
+    match_no = 21
 
-    for i in range(5):
+    for i in range(2):
         team1 = teams[i * 2]
         team2 = teams[i * 2 + 1]
 
@@ -81,8 +84,6 @@ async def create_poll_auto(bot, match):
 
     now = datetime.now().strftime("%H:%M")
 
-    print(f"CREATE CHECK {match_no}: now={now}, target={match['create_time']}")
-
     if now < match["create_time"]:
         return
 
@@ -108,14 +109,15 @@ async def create_poll_auto(bot, match):
             "message_id": message.message_id,
             "options": options,
             "votes": {},
-            "closed": False
+            "closed": False,
+            "updated": False
         }
 
         save_data(data)
-        print(f"✅ CREATED MATCH {match_no}")
+        print(f"✅ Created match {match_no}")
 
     except Exception as e:
-        print("❌ CREATE ERROR:", e)
+        print("❌ Create error:", e)
 
 
 async def close_poll_auto(bot, match):
@@ -132,8 +134,6 @@ async def close_poll_auto(bot, match):
 
     now = datetime.now().strftime("%H:%M")
 
-    print(f"CLOSE CHECK {match_no}: now={now}, target={match['close_time']}")
-
     if now < match["close_time"]:
         return
 
@@ -142,17 +142,115 @@ async def close_poll_auto(bot, match):
         poll["closed"] = True
         save_data(data)
 
-        print(f"⛔ CLOSED MATCH {match_no}")
+        print(f"⛔ Closed match {match_no}")
 
     except Exception as e:
-        print("❌ CLOSE ERROR:", e)
+        print("❌ Close error:", e)
+
+
+# ================== VOTE HANDLER ==================
+
+async def handle_vote(update, context):
+    answer = update.poll_answer
+    poll_id = answer.poll_id
+    user = answer.user
+
+    data = load_data()
+
+    for match_no, poll in data["polls"].items():
+        if poll["poll_id"] == poll_id:
+
+            if str(user.id) not in data["users"]:
+                data["users"][str(user.id)] = {
+                    "name": user.first_name,
+                    "points": 0
+                }
+
+            if not answer.option_ids:
+                if str(user.id) in poll["votes"]:
+                    del poll["votes"][str(user.id)]
+            else:
+                poll["votes"][str(user.id)] = answer.option_ids[0]
+
+            break
+
+    save_data(data)
+
+
+# ================== UPDATE RESULT ==================
+
+async def update_result(update, context):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        match_no = context.args[0]
+        winner = context.args[1].upper()
+    except:
+        await update.message.reply_text("Usage: /update 16 SRH")
+        return
+
+    data = load_data()
+
+    if match_no not in data["polls"]:
+        await update.message.reply_text("Invalid match")
+        return
+
+    poll = data["polls"][match_no]
+
+    if poll.get("updated"):
+        await update.message.reply_text("Already updated")
+        return
+
+    options = poll["options"]
+    votes = poll["votes"]
+
+    high = int(options[0].split()[1])
+    low = int(options[2].split()[1])
+
+    for uid, user in data["users"].items():
+        vote = votes.get(uid)
+
+        if vote is None:
+            user["points"] -= int(low * 0.5)
+            continue
+
+        team = options[vote].split()[0].upper()
+        pts = int(options[vote].split()[1])
+
+        if team == winner:
+            user["points"] += pts
+        else:
+            user["points"] -= int(high * 0.5)
+
+    poll["updated"] = True
+    save_data(data)
+
+    await update.message.reply_text(f"✅ Match {match_no} updated: {winner}")
+
+
+# ================== LEADERBOARD ==================
+
+async def leaderboard(update, context):
+    data = load_data()
+
+    if not data["users"]:
+        await update.message.reply_text("No players yet.")
+        return
+
+    users = sorted(data["users"].values(), key=lambda x: x["points"], reverse=True)
+
+    text = "🏆 Leaderboard\n\n"
+
+    for i, user in enumerate(users, 1):
+        text += f"{i}. {user['name']} — {user['points']} pts\n"
+
+    await update.message.reply_text(text)
 
 
 # ================== SCHEDULER ==================
 
 def scheduler_thread(bot):
-    print("🚀 Scheduler STARTED")
-
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -163,7 +261,6 @@ def scheduler_thread(bot):
 
     while True:
         try:
-            print("🔁 Scheduler running...")
             loop.run_until_complete(run_all())
         except Exception as e:
             print("❌ Scheduler error:", e)
@@ -171,43 +268,23 @@ def scheduler_thread(bot):
         time.sleep(10)
 
 
-# ================== WEB SERVER ==================
-
-def run_web():
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"Bot is running")
-
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), Handler)
-    print(f"🌐 Web running on {port}")
-    server.serve_forever()
-
-
-# ================== COMMANDS ==================
-
-async def leaderboard(update, context):
-    await update.message.reply_text("Bot running!")
-
-
-# ================== MAIN ==================
+# ================== RUN ==================
 
 def main():
-    print("🔥 BOT STARTING")
+    print("🔥 Bot starting")
 
     app = Application.builder().token(TOKEN).build()
 
+    app.add_handler(CommandHandler("update", update_result))
     app.add_handler(CommandHandler("leaderboard", leaderboard))
-    app.add_handler(PollAnswerHandler(lambda u, c: None))
+    app.add_handler(PollAnswerHandler(handle_vote))
 
     bot = Bot(TOKEN)
 
     threading.Thread(target=run_web, daemon=True).start()
     threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
 
-    print("✅ BOT LIVE")
+    print("✅ Bot running")
 
     app.run_polling()
 
