@@ -257,3 +257,21 @@ threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
 print("Bot running clean version...")
 
 app.run_polling()
+
+# =========== DUPLICATE SERVER =============
+
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+def run_web():
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Bot is running")
+
+    port = 10000
+    server = HTTPServer(("0.0.0.0", port), Handler)
+    server.serve_forever()
+
+threading.Thread(target=run_web, daemon=True).start()
