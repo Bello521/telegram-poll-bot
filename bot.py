@@ -51,8 +51,9 @@ MATCH_SCHEDULE = generate_mock_schedule()
 
 # ================== AUTO FUNCTIONS ==================
 
-print(f"🟢 Create check for {match['match_no']}")
 async def create_poll_auto(bot, match):
+    print(f"🟢 Create check for {match['match_no']}")
+
     data = load_data()
     match_no = match["match_no"]
 
