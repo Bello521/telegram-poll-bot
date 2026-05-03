@@ -30,6 +30,7 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
 
+
 # ================== MATCH SCHEDULE ==================
 
 MATCH_SCHEDULE = [
@@ -38,7 +39,7 @@ MATCH_SCHEDULE = [
         "team1": "CSK",
         "team2": "MI",
         "type": "normal",
-        "time": "17:23"   # 🔥 change to current time +1 min for testing
+        "time": "23:59"   # change for testing
     }
 ]
 
@@ -112,12 +113,6 @@ async def close_poll_auto(bot, match):
         try:
             await bot.stop_poll(GROUP_ID, poll["message_id"])
 
-            # 🔥 unpin after closing
-            try:
-                await bot.unpin_chat_message(GROUP_ID, poll["message_id"])
-            except:
-                pass
-
             poll["closed"] = True
             save_data(data)
 
@@ -137,7 +132,7 @@ def scheduler_thread(bot):
         for match in MATCH_SCHEDULE:
             await create_poll_auto(bot, match)
 
-    # 🔥 FOR TESTING → runs every minute
+    # TEST MODE (change later to 06:00)
     schedule.every(1).minutes.do(lambda: loop.run_until_complete(create_all()))
 
     while True:
@@ -168,7 +163,6 @@ async def handle_vote(update, context):
                 "points": data["users"].get(str(user.id), {}).get("points", 0)
             }
 
-            # 🔥 vote removed
             if not answer.option_ids:
                 if str(user.id) in poll["votes"]:
                     del poll["votes"][str(user.id)]
@@ -227,11 +221,9 @@ async def update_result(update, context):
     poll["updated"] = True
     save_data(data)
 
-    match_name = poll["match"]
-
     await update.message.reply_text(
         f"🏏 Match {match_no} Result\n\n"
-        f"{match_name}\n"
+        f"{poll['match']}\n"
         f"🏆 Winner: {winner}\n\n"
         f"Points updated!"
     )
@@ -250,6 +242,9 @@ async def leaderboard(update, context):
 
 # ================== RUN ==================
 
+import os
+TOKEN = os.getenv("TOKEN")
+
 app = Application.builder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("update", update_result))
@@ -260,6 +255,6 @@ bot = Bot(TOKEN)
 
 threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
 
-print("Bot running...")
+print("Bot running clean version...")
 
 app.run_polling()
