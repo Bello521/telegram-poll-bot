@@ -3,30 +3,26 @@ import json
 import asyncio
 import threading
 import time
-import schedule
 import os
-
-
-from datetime import datetime, timedelta  # ✅ THIS LINE
-
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Bot
 from telegram.ext import Application, CommandHandler, PollAnswerHandler
 
+print("🔥 BOT FILE STARTED")
+
+# ================== CONFIG ==================
 
 TOKEN = os.getenv("TOKEN")
 
-ADMIN_IDS = [1214956315]
-GROUP_ID = -1003976644783
-
+GROUP_ID = -1003976644783   # 🔴 PUT YOUR GROUP ID
+ADMIN_IDS = [1214956315]     # 🔴 PUT YOUR TELEGRAM ID
 
 DATA_FILE = "data.json"
 
 
 # ================== DATA ==================
-
-DATA_FILE = "data.json"
 
 def load_data():
     try:
@@ -35,22 +31,21 @@ def load_data():
     except:
         return {"users": {}, "polls": {}}
 
+
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
 
 
-# ================== MATCH SCHEDULE (2 MATCH TEST) ==================
-
-from datetime import datetime, timedelta
+# ================== MOCK MATCH SCHEDULE ==================
 
 def generate_mock_schedule():
     teams = ["SRH", "PBKS", "RCB", "RR"]
 
-    now = datetime.now() - timedelta(minutes=1)  # start immediately
+    now = datetime.now() - timedelta(minutes=1)
 
     schedule = []
-    match_no = 21
+    match_no = 16
 
     for i in range(2):
         team1 = teams[i * 2]
@@ -73,7 +68,7 @@ def generate_mock_schedule():
 MATCH_SCHEDULE = generate_mock_schedule()
 
 
-# ================== POLL LOGIC ==================
+# ================== POLL FUNCTIONS ==================
 
 async def create_poll_auto(bot, match):
     data = load_data()
@@ -83,6 +78,8 @@ async def create_poll_auto(bot, match):
         return
 
     now = datetime.now().strftime("%H:%M")
+
+    print(f"🟢 CREATE CHECK {match_no} | now={now} target={match['create_time']}")
 
     if now < match["create_time"]:
         return
@@ -114,10 +111,10 @@ async def create_poll_auto(bot, match):
         }
 
         save_data(data)
-        print(f"✅ Created match {match_no}")
+        print(f"✅ CREATED MATCH {match_no}")
 
     except Exception as e:
-        print("❌ Create error:", e)
+        print("❌ CREATE ERROR:", e)
 
 
 async def close_poll_auto(bot, match):
@@ -142,10 +139,10 @@ async def close_poll_auto(bot, match):
         poll["closed"] = True
         save_data(data)
 
-        print(f"⛔ Closed match {match_no}")
+        print(f"⛔ CLOSED MATCH {match_no}")
 
     except Exception as e:
-        print("❌ Close error:", e)
+        print("❌ CLOSE ERROR:", e)
 
 
 # ================== VOTE HANDLER ==================
@@ -160,12 +157,14 @@ async def handle_vote(update, context):
     for match_no, poll in data["polls"].items():
         if poll["poll_id"] == poll_id:
 
+            # ensure user exists
             if str(user.id) not in data["users"]:
                 data["users"][str(user.id)] = {
                     "name": user.first_name,
                     "points": 0
                 }
 
+            # vote removed
             if not answer.option_ids:
                 if str(user.id) in poll["votes"]:
                     del poll["votes"][str(user.id)]
@@ -251,6 +250,8 @@ async def leaderboard(update, context):
 # ================== SCHEDULER ==================
 
 def scheduler_thread(bot):
+    print("🚀 Scheduler started")
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -261,6 +262,7 @@ def scheduler_thread(bot):
 
     while True:
         try:
+            print("🔁 Scheduler loop")
             loop.run_until_complete(run_all())
         except Exception as e:
             print("❌ Scheduler error:", e)
@@ -268,10 +270,25 @@ def scheduler_thread(bot):
         time.sleep(10)
 
 
-# ================== RUN ==================
+# ================== WEB SERVER ==================
+
+def run_web():
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Bot is running")
+
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), Handler)
+    print(f"🌐 Web running on port {port}")
+    server.serve_forever()
+
+
+# ================== MAIN ==================
 
 def main():
-    print("🔥 Bot starting")
+    print("🚀 BOT STARTING")
 
     app = Application.builder().token(TOKEN).build()
 
@@ -284,7 +301,7 @@ def main():
     threading.Thread(target=run_web, daemon=True).start()
     threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
 
-    print("✅ Bot running")
+    print("✅ BOT RUNNING")
 
     app.run_polling()
 
