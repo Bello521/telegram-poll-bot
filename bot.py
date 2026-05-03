@@ -52,7 +52,7 @@ MATCH_SCHEDULE = generate_mock_schedule()
 # ================== AUTO FUNCTIONS ==================
 
 async def create_poll_auto(bot, match):
-    print(f"🟢 Create check for {match['match_no']}")
+    print(f"🟢 Create check for {match['match_no']} at {datetime.now().strftime('%H:%M')}")
 
     data = load_data()
     match_no = match["match_no"]
@@ -141,25 +141,26 @@ async def close_poll_auto(bot, match):
 # ================== SCHEDULER ==================
 
 def scheduler_thread(bot):
-    print("🚀 Scheduler thread STARTED")  # MUST PRINT
+    print("🚀 Scheduler thread STARTED")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     async def run_all():
         for match in MATCH_SCHEDULE:
-            print(f"🔍 Checking match {match['match_no']}")  # MUST PRINT
+            print(f"🔍 Checking match {match['match_no']}")
             await create_poll_auto(bot, match)
             await close_poll_auto(bot, match)
 
     while True:
         try:
-            print("🔁 Scheduler running...")
+            print("🔁 Scheduler loop running...")
             loop.run_until_complete(run_all())
         except Exception as e:
             print("❌ Scheduler error:", e)
 
         time.sleep(10)
+
 
 # ================== COMMANDS ==================
 
@@ -277,7 +278,10 @@ def run_web():
 
 # ================== RUN ==================
 
+# ================== RUN ==================
+
 import os
+
 TOKEN = os.getenv("TOKEN")
 
 app = Application.builder().token(TOKEN).build()
@@ -288,12 +292,16 @@ app.add_handler(PollAnswerHandler(handle_vote))
 
 bot = Bot(TOKEN)
 
-# 🔥 Start scheduler
-threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
+# 🔥 START SCHEDULER (WITH PRINT)
+def start_scheduler():
+    print("🚀 Starting scheduler thread...")
+    scheduler_thread(bot)
 
-# 🔥 Start web server (ADD THIS LINE)
+threading.Thread(target=start_scheduler, daemon=True).start()
+
+# 🔥 START WEB SERVER
 threading.Thread(target=run_web, daemon=True).start()
 
-print("Bot running clean version...")
+print("✅ Bot fully started")
 
 app.run_polling()
