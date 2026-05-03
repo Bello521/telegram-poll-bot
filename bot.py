@@ -14,33 +14,38 @@ TOKEN = os.getenv("TOKEN")
 ADMIN_IDS = [1214956315]
 GROUP_ID = -1003976644783
 
-# ================== DATA ==================
+# ================== MATCH SCHEDULE (MOCK TEST) ==================
 
-DATA_FILE = "data.json"
+from datetime import datetime, timedelta
 
-def load_data():
-    try:
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"users": {}, "polls": {}}
+def generate_mock_schedule():
+    teams = ["SRH", "PBKS", "RCB", "RR", "DC", "GT", "CSK", "LSG", "KKR", "MI"]
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
+    now = datetime.now()
+
+    schedule = []
+    match_no = 16
+
+    for i in range(5):
+        team1 = teams[i * 2]
+        team2 = teams[i * 2 + 1]
+
+        create_time = now + timedelta(minutes=i * 4)
+        close_time = create_time + timedelta(minutes=2)
+
+        schedule.append({
+            "match_no": str(match_no + i),
+            "team1": team1,
+            "team2": team2,
+            "type": "normal",
+            "create_time": create_time.strftime("%H:%M"),
+            "close_time": close_time.strftime("%H:%M")
+        })
+
+    return schedule
 
 
-# ================== MATCH SCHEDULE ==================
-
-MATCH_SCHEDULE = [
-    {
-        "match_no": "15",
-        "team1": "CSK",
-        "team2": "MI",
-        "type": "normal",
-        "time": "23:59"   # change for testing
-    }
-]
+MATCH_SCHEDULE = generate_mock_schedule()
 
 
 # ================== AUTO FUNCTIONS ==================
@@ -52,16 +57,16 @@ async def create_poll_auto(bot, match):
     if match_no in data["polls"]:
         return
 
+    now = time.strftime("%H:%M")
+
+    # ⛔ wait until create time
+    if now < match["create_time"]:
+        return
+
     team1 = match["team1"]
     team2 = match["team2"]
-    match_type = match["type"]
 
-    if match_type == "normal":
-        high, low = 100, 50
-    elif match_type == "double":
-        high, low = 300, 150
-    elif match_type == "playoff":
-        high, low = 1000, 500
+    high, low = 100, 50
 
     options = [
         f"{team1} {high}",
@@ -81,7 +86,6 @@ async def create_poll_auto(bot, match):
 
     data["polls"][match_no] = {
         "match": f"{team1} vs {team2}",
-        "type": match_type,
         "poll_id": message.poll.id,
         "message_id": message.message_id,
         "options": options,
@@ -91,7 +95,7 @@ async def create_poll_auto(bot, match):
     }
 
     save_data(data)
-    print(f"Created poll {match_no}")
+    print(f"✅ Created match {match_no}")
 
 
 async def close_poll_auto(bot, match):
@@ -108,17 +112,18 @@ async def close_poll_auto(bot, match):
 
     now = time.strftime("%H:%M")
 
-    if now >= match["time"]:
-        try:
-            await bot.stop_poll(GROUP_ID, poll["message_id"])
+    # ⛔ wait until close time
+    if now < match["close_time"]:
+        return
 
-            poll["closed"] = True
-            save_data(data)
+    try:
+        await bot.stop_poll(GROUP_ID, poll["message_id"])
+        poll["closed"] = True
+        save_data(data)
 
-            print(f"Closed match {match_no}")
-
-        except Exception as e:
-            print("Close error:", e)
+        print(f"⛔ Closed match {match_no}")
+    except Exception as e:
+        print("Close error:", e)
 
 
 # ================== SCHEDULER ==================
@@ -127,18 +132,13 @@ def scheduler_thread(bot):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    async def create_all():
+    async def run_all():
         for match in MATCH_SCHEDULE:
             await create_poll_auto(bot, match)
-
-    # TEST MODE (change later to 06:00)
-    schedule.every(1).minutes.do(lambda: loop.run_until_complete(create_all()))
+            await close_poll_auto(bot, match)
 
     while True:
-        for match in MATCH_SCHEDULE:
-            loop.run_until_complete(close_poll_auto(bot, match))
-
-        schedule.run_pending()
+        loop.run_until_complete(run_all())
         time.sleep(30)
 
 
