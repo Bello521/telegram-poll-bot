@@ -9,7 +9,6 @@ import os
 from telegram import Bot
 from telegram.ext import Application, CommandHandler, PollAnswerHandler
 
-import os
 TOKEN = os.getenv("TOKEN")
 
 ADMIN_IDS = [1214956315]
