@@ -281,25 +281,29 @@ def run_web():
 
 import os
 
-TOKEN = os.getenv("TOKEN")
+def main():
+    print("🔥 BOT FILE STARTED")
 
-app = Application.builder().token(TOKEN).build()
+    TOKEN = os.getenv("TOKEN")
 
-app.add_handler(CommandHandler("update", update_result))
-app.add_handler(CommandHandler("leaderboard", leaderboard))
-app.add_handler(PollAnswerHandler(handle_vote))
+    app = Application.builder().token(TOKEN).build()
 
-bot = Bot(TOKEN)
+    app.add_handler(CommandHandler("update", update_result))
+    app.add_handler(CommandHandler("leaderboard", leaderboard))
+    app.add_handler(PollAnswerHandler(handle_vote))
 
-print("🚀 Starting bot...")
+    bot = Bot(TOKEN)
 
-# 🔥 START WEB SERVER FIRST
-threading.Thread(target=run_web, daemon=True).start()
-print("🌐 Web server started")
+    print("🚀 Starting web server...")
+    threading.Thread(target=run_web, daemon=True).start()
 
-# 🔥 START SCHEDULER (IMPORTANT FIX)
-threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
-print("⏱ Scheduler thread started")
+    print("⏱ Starting scheduler...")
+    threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
 
-# 🔥 NOW START TELEGRAM BOT (BLOCKING)
-app.run_polling()
+    print("✅ Bot fully running")
+
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
