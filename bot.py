@@ -14,14 +14,15 @@ TOKEN = os.getenv("TOKEN")
 ADMIN_IDS = [1214956315]
 GROUP_ID = -1003976644783
 
-# ================== MATCH SCHEDULE (MOCK TEST) ==================
+# ================== MATCH SCHEDULE (MOCK TEST - FIXED) ==================
 
 from datetime import datetime, timedelta
 
 def generate_mock_schedule():
     teams = ["SRH", "PBKS", "RCB", "RR", "DC", "GT", "CSK", "LSG", "KKR", "MI"]
 
-    now = datetime.now()
+    # 🔥 Force immediate start (important fix)
+    now = datetime.now() - timedelta(minutes=1)
 
     schedule = []
     match_no = 16
@@ -57,9 +58,10 @@ async def create_poll_auto(bot, match):
     if match_no in data["polls"]:
         return
 
-    now = time.strftime("%H:%M")
+    now = datetime.now().strftime("%H:%M")
 
-    # ⛔ wait until create time
+    print(f"[CREATE CHECK] {match_no} now={now} create={match['create_time']}")
+
     if now < match["create_time"]:
         return
 
@@ -75,27 +77,31 @@ async def create_poll_auto(bot, match):
         f"{team2} {low}"
     ]
 
-    message = await bot.send_poll(
-        chat_id=GROUP_ID,
-        question=f"Match {match_no}: {team1} vs {team2}",
-        options=options,
-        is_anonymous=False
-    )
+    try:
+        message = await bot.send_poll(
+            chat_id=GROUP_ID,
+            question=f"Match {match_no}: {team1} vs {team2}",
+            options=options,
+            is_anonymous=False
+        )
 
-    await bot.pin_chat_message(GROUP_ID, message.message_id)
+        await bot.pin_chat_message(GROUP_ID, message.message_id)
 
-    data["polls"][match_no] = {
-        "match": f"{team1} vs {team2}",
-        "poll_id": message.poll.id,
-        "message_id": message.message_id,
-        "options": options,
-        "votes": {},
-        "updated": False,
-        "closed": False
-    }
+        data["polls"][match_no] = {
+            "match": f"{team1} vs {team2}",
+            "poll_id": message.poll.id,
+            "message_id": message.message_id,
+            "options": options,
+            "votes": {},
+            "updated": False,
+            "closed": False
+        }
 
-    save_data(data)
-    print(f"✅ Created match {match_no}")
+        save_data(data)
+        print(f"✅ Created match {match_no}")
+
+    except Exception as e:
+        print("Create error:", e)
 
 
 async def close_poll_auto(bot, match):
@@ -110,18 +116,21 @@ async def close_poll_auto(bot, match):
     if poll.get("closed"):
         return
 
-    now = time.strftime("%H:%M")
+    now = datetime.now().strftime("%H:%M")
 
-    # ⛔ wait until close time
+    print(f"[CLOSE CHECK] {match_no} now={now} close={match['close_time']}")
+
     if now < match["close_time"]:
         return
 
     try:
         await bot.stop_poll(GROUP_ID, poll["message_id"])
+
         poll["closed"] = True
         save_data(data)
 
         print(f"⛔ Closed match {match_no}")
+
     except Exception as e:
         print("Close error:", e)
 
@@ -138,8 +147,9 @@ def scheduler_thread(bot):
             await close_poll_auto(bot, match)
 
     while True:
+        print("🔁 Scheduler running...")
         loop.run_until_complete(run_all())
-        time.sleep(30)
+        time.sleep(20)   # faster checks
 
 
 # ================== COMMANDS ==================
