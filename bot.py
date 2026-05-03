@@ -1,4 +1,4 @@
-
+print("🔥 BOT FILE STARTED")
 import json
 import asyncio
 import threading
@@ -141,7 +141,7 @@ async def close_poll_auto(bot, match):
 # ================== SCHEDULER ==================
 
 def scheduler_thread(bot):
-    print("🚀 Scheduler thread STARTED")
+    print("🚀 Scheduler thread RUNNING")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -154,13 +154,12 @@ def scheduler_thread(bot):
 
     while True:
         try:
-            print("🔁 Scheduler loop running...")
+            print("🔁 Scheduler loop...")
             loop.run_until_complete(run_all())
         except Exception as e:
             print("❌ Scheduler error:", e)
 
         time.sleep(10)
-
 
 # ================== COMMANDS ==================
 
@@ -292,16 +291,15 @@ app.add_handler(PollAnswerHandler(handle_vote))
 
 bot = Bot(TOKEN)
 
-# 🔥 START SCHEDULER (WITH PRINT)
-def start_scheduler():
-    print("🚀 Starting scheduler thread...")
-    scheduler_thread(bot)
+print("🚀 Starting bot...")
 
-threading.Thread(target=start_scheduler, daemon=True).start()
-
-# 🔥 START WEB SERVER
+# 🔥 START WEB SERVER FIRST
 threading.Thread(target=run_web, daemon=True).start()
+print("🌐 Web server started")
 
-print("✅ Bot fully started")
+# 🔥 START SCHEDULER (IMPORTANT FIX)
+threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
+print("⏱ Scheduler thread started")
 
+# 🔥 NOW START TELEGRAM BOT (BLOCKING)
 app.run_polling()
