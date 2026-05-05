@@ -42,34 +42,32 @@ def save_data(data):
 def generate_mock_schedule():
     now = datetime.now() - timedelta(minutes=1)
 
-    schedule = [
-        # Match 1
+    return [
         {
             "match_no": "1",
             "team1": "SRH",
             "team2": "RCB",
+            "type": "normal",
             "create_time": (now + timedelta(minutes=0)).strftime("%H:%M"),
             "close_time": (now + timedelta(minutes=2)).strftime("%H:%M"),
         },
-        # Match 2 (Double header)
         {
             "match_no": "2",
             "team1": "CSK",
             "team2": "MI",
+            "type": "double",
             "create_time": (now + timedelta(minutes=4)).strftime("%H:%M"),
             "close_time": (now + timedelta(minutes=6)).strftime("%H:%M"),
         },
-        # Match 3 (Same day second match)
         {
             "match_no": "3",
             "team1": "KKR",
             "team2": "RR",
+            "type": "playoffs",
             "create_time": (now + timedelta(minutes=8)).strftime("%H:%M"),
             "close_time": (now + timedelta(minutes=10)).strftime("%H:%M"),
         }
     ]
-
-    return schedule
 
 
 MATCH_SCHEDULE = generate_mock_schedule()
@@ -89,68 +87,47 @@ async def create_poll_auto(bot, match):
     if now < match["create_time"]:
         return
 
+    # 🔥 STEP 2: DYNAMIC POINTS BASED ON TYPE
+    if match["type"] == "normal":
+        high, low = 100, 50
+    elif match["type"] == "double":
+        high, low = 300, 150
+    elif match["type"] == "playoffs":
+        high, low = 1000, 500
+
     options = [
-        f"{match['team1']} 100",
-        f"{match['team2']} 100",
-        f"{match['team1']} 50",
-        f"{match['team2']} 50"
+        f"{match['team1']} {high}",
+        f"{match['team2']} {high}",
+        f"{match['team1']} {low}",
+        f"{match['team2']} {low}"
     ]
 
     try:
         message = await bot.send_poll(
             chat_id=GROUP_ID,
-            question=f"Match {match_no}: {match['team1']} vs {match['team2']}",
+            question=f"Match {match_no} ({match['type'].upper()}): {match['team1']} vs {match['team2']}",
             options=options,
             is_anonymous=False
         )
 
         await bot.pin_chat_message(GROUP_ID, message.message_id)
 
+        # 🔥 STEP 3: STORE TYPE HERE
         data["polls"][match_no] = {
             "poll_id": message.poll.id,
             "message_id": message.message_id,
             "options": options,
             "votes": {},
             "closed": False,
-            "updated": False
+            "updated": False,
+            "type": match["type"]   # ✅ THIS IS THE IMPORTANT LINE
         }
 
         save_data(data)
-        print(f"✅ CREATED MATCH {match_no}")
+        print(f"✅ CREATED MATCH {match_no} ({match['type']})")
 
     except Exception as e:
         print("❌ CREATE ERROR:", e)
-
-
-# ================== CLOSE POLL ==================
-
-async def close_poll_auto(bot, match):
-    data = load_data()
-    match_no = match["match_no"]
-
-    if match_no not in data["polls"]:
-        return
-
-    poll = data["polls"][match_no]
-
-    if poll.get("closed"):
-        return
-
-    now = datetime.now().strftime("%H:%M")
-
-    if now < match["close_time"]:
-        return
-
-    try:
-        await bot.stop_poll(GROUP_ID, poll["message_id"])
-        poll["closed"] = True
-        save_data(data)
-
-        print(f"⛔ CLOSED MATCH {match_no}")
-
-    except Exception as e:
-        print("❌ CLOSE ERROR:", e)
-
 
 # ================== VOTE HANDLER ==================
 
@@ -177,6 +154,8 @@ async def handle_vote(update, context):
 
             break
 
+    print(f"Vote updated: {user.first_name} -> {answer.option_ids}")
+
     save_data(data)
 
 
@@ -187,7 +166,7 @@ async def update_result(update, context):
         return
 
     try:
-        match_no = context.args[0]
+        match_no = str(context.args[0])
         winner = context.args[1].strip().upper()
     except:
         await update.message.reply_text("Usage: /update 1 SRH")
@@ -208,21 +187,33 @@ async def update_result(update, context):
     options = poll["options"]
     votes = poll["votes"]
 
+    print("\n====== DEBUG START ======")
+    print(f"Winner Entered: {winner}")
+    print(f"Available Options: {options}")
+    print(f"Votes Mapping: {votes}")
+    print("------------------------")
+
     for uid, user in data["users"].items():
         vote = votes.get(uid)
+        name = user["name"]
 
         if vote is None:
-            user["points"] -= 25
+            print(f"{name} → NO VOTE → -25")
             continue
 
         option_text = options[vote]
-        team = option_text.split()[0].upper()
-        pts = int(option_text.split()[1])
+        team, pts = option_text.split()
+        team = team.upper()
+        pts = int(pts)
+
+        print(f"{name} chose: {option_text}")
 
         if team == winner:
-            user["points"] += pts
+            print(f"→ CORRECT (+{pts})")
         else:
-            user["points"] -= int(pts * 0.5)
+            print(f"→ WRONG (-{pts//2})")
+
+    print("====== DEBUG END ======\n")
 
     poll["updated"] = True
     save_data(data)
