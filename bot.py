@@ -204,29 +204,34 @@ async def update_result(update, context):
     options = poll["options"]
     votes = poll["votes"]
 
-    high = int(options[0].split()[1])
-    low = int(options[2].split()[1])
-
     for uid, user in data["users"].items():
         vote = votes.get(uid)
 
+        # ❌ NO VOTE
         if vote is None:
-            user["points"] -= int(low * 0.5)
+            user["points"] -= 25
+            print(f"{user['name']} → NO VOTE → -25")
             continue
 
-        team = options[vote].split()[0].upper()
-        pts = int(options[vote].split()[1])
+        option_text = options[vote]
+        team = option_text.split()[0].upper()
+        pts = int(option_text.split()[1])  # 100 or 50
 
+        # ✅ CORRECT
         if team == winner:
             user["points"] += pts
+            print(f"{user['name']} → CORRECT +{pts}")
+
+        # ❌ WRONG
         else:
-            user["points"] -= int(high * 0.5)
+            penalty = int(pts * 0.5)  # KEY FIX
+            user["points"] -= penalty
+            print(f"{user['name']} → WRONG -{penalty}")
 
     poll["updated"] = True
     save_data(data)
 
     await update.message.reply_text(f"✅ Match {match_no} updated: {winner}")
-
 
 # ================== LEADERBOARD ==================
 
