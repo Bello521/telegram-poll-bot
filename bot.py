@@ -40,27 +40,34 @@ def save_data(data):
 # ================== MATCH SCHEDULE ==================
 
 def generate_mock_schedule():
-    teams = ["SRH", "PBKS", "RCB", "RR"]
-
     now = datetime.now() - timedelta(minutes=1)
 
-    schedule = []
-    match_no = 16
-
-    for i in range(2):
-        team1 = teams[i * 2]
-        team2 = teams[i * 2 + 1]
-
-        create_time = now + timedelta(minutes=i * 4)
-        close_time = create_time + timedelta(minutes=2)
-
-        schedule.append({
-            "match_no": str(match_no + i),
-            "team1": team1,
-            "team2": team2,
-            "create_time": create_time.strftime("%H:%M"),
-            "close_time": close_time.strftime("%H:%M")
-        })
+    schedule = [
+        # Match 1
+        {
+            "match_no": "1",
+            "team1": "SRH",
+            "team2": "RCB",
+            "create_time": (now + timedelta(minutes=0)).strftime("%H:%M"),
+            "close_time": (now + timedelta(minutes=2)).strftime("%H:%M"),
+        },
+        # Match 2 (Double header)
+        {
+            "match_no": "2",
+            "team1": "CSK",
+            "team2": "MI",
+            "create_time": (now + timedelta(minutes=4)).strftime("%H:%M"),
+            "close_time": (now + timedelta(minutes=6)).strftime("%H:%M"),
+        },
+        # Match 3 (Same day second match)
+        {
+            "match_no": "3",
+            "team1": "KKR",
+            "team2": "RR",
+            "create_time": (now + timedelta(minutes=8)).strftime("%H:%M"),
+            "close_time": (now + timedelta(minutes=10)).strftime("%H:%M"),
+        }
+    ]
 
     return schedule
 
@@ -68,7 +75,7 @@ def generate_mock_schedule():
 MATCH_SCHEDULE = generate_mock_schedule()
 
 
-# ================== POLL CREATE ==================
+# ================== CREATE POLL ==================
 
 async def create_poll_auto(bot, match):
     data = load_data()
@@ -115,7 +122,7 @@ async def create_poll_auto(bot, match):
         print("❌ CREATE ERROR:", e)
 
 
-# ================== POLL CLOSE ==================
+# ================== CLOSE POLL ==================
 
 async def close_poll_auto(bot, match):
     data = load_data()
@@ -172,7 +179,8 @@ async def handle_vote(update, context):
 
     save_data(data)
 
-# ================== UPDATE RESULT (FINAL LOGIC) ==================
+
+# ================== UPDATE RESULT ==================
 
 async def update_result(update, context):
     if update.effective_user.id not in ADMIN_IDS:
@@ -180,9 +188,9 @@ async def update_result(update, context):
 
     try:
         match_no = context.args[0]
-        winner = context.args[1].upper()
+        winner = context.args[1].strip().upper()
     except:
-        await update.message.reply_text("Usage: /update 16 SRH")
+        await update.message.reply_text("Usage: /update 1 SRH")
         return
 
     data = load_data()
@@ -200,45 +208,33 @@ async def update_result(update, context):
     options = poll["options"]
     votes = poll["votes"]
 
-    print("====== DEBUG START ======")
-    print("Winner:", winner)
-    print("Options:", options)
-    print("Votes:", votes)
-
     for uid, user in data["users"].items():
         vote = votes.get(uid)
 
-        name = user["name"]
-
-        # ❌ NO VOTE
         if vote is None:
             user["points"] -= 25
-            print(f"{name} → NO VOTE → -25")
             continue
 
         option_text = options[vote]
-        parts = option_text.split()
+        team = option_text.split()[0].upper()
+        pts = int(option_text.split()[1])
 
-        team = parts[0].upper()
-        pts = int(parts[1])
-
-        print(f"{name} voted: {option_text}")
-
-        # ✅ CORRECT
         if team == winner:
             user["points"] += pts
-            print(f"→ CORRECT +{pts}")
-
-        # ❌ WRONG
         else:
-            penalty = int(pts * 0.5)
-            user["points"] -= penalty
-            print(f"→ WRONG -{penalty}")
-
-    print("====== DEBUG END ======")
+            user["points"] -= int(pts * 0.5)
 
     poll["updated"] = True
     save_data(data)
+
+    # ✅ UNPIN AFTER UPDATE
+    try:
+        await context.bot.unpin_chat_message(GROUP_ID, poll["message_id"])
+    except:
+        pass
+
+    # ✅ AUTO LEADERBOARD
+    await leaderboard(update, context)
 
     await update.message.reply_text(f"✅ Match {match_no} updated: {winner}")
 
@@ -300,8 +296,6 @@ def run_web():
 # ================== MAIN ==================
 
 def main():
-    print("🚀 BOT STARTING")
-
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("update", update_result))
