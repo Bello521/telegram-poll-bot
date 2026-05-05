@@ -111,8 +111,6 @@ async def create_poll_auto(bot, match):
             is_anonymous=False
         )
 
-        await bot.pin_chat_message(GROUP_ID, message.message_id)
-
         data["polls"][match_no] = {
             "poll_id": message.poll.id,
             "message_id": message.message_id,
@@ -124,7 +122,13 @@ async def create_poll_auto(bot, match):
         }
 
         save_data(data)
-        print(f"✅ CREATED MATCH {match_no}")
+
+        print(f"✅ POLL STORED BEFORE PIN: {match_no}")
+
+    # 👉 NOW pin AFTER saving
+        await bot.pin_chat_message(GROUP_ID, message.message_id)
+
+        print(f"📌 PINNED MATCH {match_no}")
 
     except Exception as e:
         print("❌ CREATE ERROR:", e)
@@ -169,27 +173,35 @@ async def handle_vote(update, context):
     poll_id = answer.poll_id
     user = answer.user
 
-    data = load_data()
+    print(f"🗳 Incoming vote from {user.first_name} | poll_id={poll_id}")
 
-    for match_no, poll in data["polls"].items():
-        if poll["poll_id"] == poll_id:
+    # 🔁 retry logic (wait for poll to be saved)
+    for _ in range(5):
+        data = load_data()
 
-            if str(user.id) not in data["users"]:
-                data["users"][str(user.id)] = {
-                    "name": user.first_name,
-                    "points": 0
-                }
+        for match_no, poll in data["polls"].items():
+            if poll["poll_id"] == poll_id:
 
-            if answer.option_ids:
-                poll["votes"][str(user.id)] = answer.option_ids[0]
-            else:
-                poll["votes"].pop(str(user.id), None)
+                if str(user.id) not in data["users"]:
+                    data["users"][str(user.id)] = {
+                        "name": user.first_name,
+                        "points": 0
+                    }
 
-            break
+                if answer.option_ids:
+                    poll["votes"][str(user.id)] = answer.option_ids[0]
+                else:
+                    poll["votes"].pop(str(user.id), None)
 
-    save_data(data)
-    print(f"🗳 Vote saved: {user.first_name} -> {answer.option_ids}")
+                save_data(data)
 
+                print(f"✅ Vote saved: {user.first_name} -> {answer.option_ids}")
+                return
+
+        # ⏳ wait before retry
+        await asyncio.sleep(1)
+
+    print(f"❌ Vote FAILED (poll not found): {user.first_name}")
 
 # ================== UPDATE RESULT ==================
 
@@ -309,16 +321,24 @@ def scheduler_thread(bot):
 # ================== WEB SERVER ==================
 
 def run_web():
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(200)
+            self.send_header("Content-type", "text/plain")
             self.end_headers()
-            self.wfile.write(b"Bot running")
+            self.wfile.write(b"Bot is alive")
 
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), Handler)
-    server.serve_forever()
 
+    print(f"🌐 Starting web server on port {port}")
+
+    try:
+        server = HTTPServer(("0.0.0.0", port), Handler)
+        server.serve_forever()
+    except Exception as e:
+        print("❌ WEB SERVER ERROR:", e)
 
 # ================== MAIN ==================
 
