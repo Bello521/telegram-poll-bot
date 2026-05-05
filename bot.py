@@ -48,7 +48,7 @@ def generate_mock_schedule():
             "team1": "SRH",
             "team2": "RCB",
             "type": "normal",
-            "create_time": now + timedelta(seconds=10),
+            "create_time": now - timedelta(seconds=5),   # immediate create
             "close_time": now + timedelta(minutes=2),
         },
         {
@@ -69,21 +69,29 @@ def generate_mock_schedule():
         }
     ]
 
+
+MATCH_SCHEDULE = generate_mock_schedule()
+
+
 # ================== CREATE POLL ==================
 
 async def create_poll_auto(bot, match):
     data = load_data()
     match_no = match["match_no"]
 
+    # prevent duplicate poll
     if match_no in data["polls"]:
         return
 
     now = datetime.now()
 
+    # 🔍 DEBUG
+    print(f"[CREATE CHECK] Match {match_no} | now={now} | create={match['create_time']}")
+
     if now < match["create_time"]:
         return
 
-    # 🔥 STEP 2: DYNAMIC POINTS BASED ON TYPE
+    # 🔥 dynamic scoring by type
     if match["type"] == "normal":
         high, low = 100, 50
     elif match["type"] == "double":
@@ -108,7 +116,7 @@ async def create_poll_auto(bot, match):
 
         await bot.pin_chat_message(GROUP_ID, message.message_id)
 
-        # 🔥 STEP 3: STORE TYPE HERE
+        # 🔥 store poll
         data["polls"][match_no] = {
             "poll_id": message.poll.id,
             "message_id": message.message_id,
@@ -116,7 +124,7 @@ async def create_poll_auto(bot, match):
             "votes": {},
             "closed": False,
             "updated": False,
-            "type": match["type"]   # ✅ THIS IS THE IMPORTANT LINE
+            "type": match["type"]
         }
 
         save_data(data)
@@ -124,6 +132,39 @@ async def create_poll_auto(bot, match):
 
     except Exception as e:
         print("❌ CREATE ERROR:", e)
+
+
+# ================== CLOSE POLL ==================
+
+async def close_poll_auto(bot, match):
+    data = load_data()
+    match_no = match["match_no"]
+
+    if match_no not in data["polls"]:
+        return
+
+    poll = data["polls"][match_no]
+
+    if poll.get("closed"):
+        return
+
+    now = datetime.now()
+
+    # 🔍 DEBUG
+    print(f"[CLOSE CHECK] Match {match_no} | now={now} | close={match['close_time']}")
+
+    if now < match["close_time"]:
+        return
+
+    try:
+        await bot.stop_poll(GROUP_ID, poll["message_id"])
+        poll["closed"] = True
+        save_data(data)
+
+        print(f"⛔ CLOSED MATCH {match_no}")
+
+    except Exception as e:
+        print("❌ CLOSE ERROR:", e)
 
 # ================== VOTE HANDLER ==================
 
@@ -259,6 +300,7 @@ def scheduler_thread(bot):
     while True:
         try:
             loop.run_until_complete(run_all())
+            print("🔁 Scheduler running...")
         except Exception as e:
             print("❌ Scheduler error:", e)
 
