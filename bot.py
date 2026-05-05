@@ -262,18 +262,18 @@ async def update_result(update, context):
         pass
 
     # ✅ AUTO LEADERBOARD
-    await leaderboard(update, context)
+    await send_leaderboard(context)
 
     await update.message.reply_text(f"✅ Match {match_no} updated: {winner}")
 
 
-# ================== LEADERBOARD ==================
+# ================== SEND LEADERBOARD ==================
 
-async def leaderboard(update, context):
+async def send_leaderboard(context):
     data = load_data()
 
     if not data["users"]:
-        await update.message.reply_text("No players yet.")
+        await context.bot.send_message(chat_id=GROUP_ID, text="No players yet.")
         return
 
     users = sorted(data["users"].values(), key=lambda x: x["points"], reverse=True)
@@ -283,8 +283,13 @@ async def leaderboard(update, context):
     for i, user in enumerate(users, 1):
         text += f"{i}. {user['name']} — {user['points']} pts\n"
 
-    await update.message.reply_text(text)
+    await context.bot.send_message(chat_id=GROUP_ID, text=text)
 
+
+# ================== LEADERBOARD COMMAND ==================
+
+async def leaderboard(update, context):
+    await send_leaderboard(context)
 
 # ================== SCHEDULER ==================
 
