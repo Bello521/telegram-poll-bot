@@ -37,7 +37,7 @@ def save_data(data):
         json.dump(data, f)
 
 
-# ================== MOCK MATCH SCHEDULE ==================
+# ================== MATCH SCHEDULE ==================
 
 def generate_mock_schedule():
     teams = ["SRH", "PBKS", "RCB", "RR"]
@@ -68,7 +68,7 @@ def generate_mock_schedule():
 MATCH_SCHEDULE = generate_mock_schedule()
 
 
-# ================== POLL FUNCTIONS ==================
+# ================== POLL CREATE ==================
 
 async def create_poll_auto(bot, match):
     data = load_data()
@@ -78,8 +78,6 @@ async def create_poll_auto(bot, match):
         return
 
     now = datetime.now().strftime("%H:%M")
-
-    print(f"🟢 CREATE CHECK {match_no} | now={now} target={match['create_time']}")
 
     if now < match["create_time"]:
         return
@@ -116,6 +114,8 @@ async def create_poll_auto(bot, match):
     except Exception as e:
         print("❌ CREATE ERROR:", e)
 
+
+# ================== POLL CLOSE ==================
 
 async def close_poll_auto(bot, match):
     data = load_data()
@@ -157,7 +157,6 @@ async def handle_vote(update, context):
     for match_no, poll in data["polls"].items():
         if poll["poll_id"] == poll_id:
 
-            # ensure user exists
             if str(user.id) not in data["users"]:
                 data["users"][str(user.id)] = {
                     "name": user.first_name,
@@ -166,8 +165,7 @@ async def handle_vote(update, context):
 
             # vote removed
             if not answer.option_ids:
-                if str(user.id) in poll["votes"]:
-                    del poll["votes"][str(user.id)]
+                poll["votes"].pop(str(user.id), None)
             else:
                 poll["votes"][str(user.id)] = answer.option_ids[0]
 
@@ -176,7 +174,7 @@ async def handle_vote(update, context):
     save_data(data)
 
 
-# ================== UPDATE RESULT ==================
+# ================== UPDATE RESULT (FINAL LOGIC) ==================
 
 async def update_result(update, context):
     if update.effective_user.id not in ADMIN_IDS:
@@ -207,31 +205,25 @@ async def update_result(update, context):
     for uid, user in data["users"].items():
         vote = votes.get(uid)
 
-        # ❌ NO VOTE
+        # NO VOTE
         if vote is None:
             user["points"] -= 25
-            print(f"{user['name']} → NO VOTE → -25")
             continue
 
         option_text = options[vote]
         team = option_text.split()[0].upper()
-        pts = int(option_text.split()[1])  # 100 or 50
+        pts = int(option_text.split()[1])
 
-        # ✅ CORRECT
         if team == winner:
             user["points"] += pts
-            print(f"{user['name']} → CORRECT +{pts}")
-
-        # ❌ WRONG
         else:
-            penalty = int(pts * 0.5)  # KEY FIX
-            user["points"] -= penalty
-            print(f"{user['name']} → WRONG -{penalty}")
+            user["points"] -= int(pts * 0.5)
 
     poll["updated"] = True
     save_data(data)
 
     await update.message.reply_text(f"✅ Match {match_no} updated: {winner}")
+
 
 # ================== LEADERBOARD ==================
 
@@ -255,8 +247,6 @@ async def leaderboard(update, context):
 # ================== SCHEDULER ==================
 
 def scheduler_thread(bot):
-    print("🚀 Scheduler started")
-
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -267,7 +257,6 @@ def scheduler_thread(bot):
 
     while True:
         try:
-            print("🔁 Scheduler loop")
             loop.run_until_complete(run_all())
         except Exception as e:
             print("❌ Scheduler error:", e)
