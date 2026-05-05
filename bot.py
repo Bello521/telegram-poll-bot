@@ -1,4 +1,3 @@
-print("🔥 BOT FILE STARTED")
 import json
 import asyncio
 import threading
@@ -10,14 +9,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Bot
 from telegram.ext import Application, CommandHandler, PollAnswerHandler
 
-print("🔥 BOT FILE STARTED")
+print("🔥 BOT STARTED")
 
 # ================== CONFIG ==================
 
 TOKEN = os.getenv("TOKEN")
 
-GROUP_ID = -1003976644783   # 🔴 PUT YOUR GROUP ID
-ADMIN_IDS = [1214956315]     # 🔴 PUT YOUR TELEGRAM ID
+GROUP_ID = -1003976644783   # 🔴 YOUR GROUP ID
+ADMIN_IDS = [1214956315]     # 🔴 YOUR TELEGRAM ID
 
 DATA_FILE = "data.json"
 
@@ -35,6 +34,7 @@ def load_data():
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
+        f.flush()
 
 
 # ================== MATCH SCHEDULE ==================
@@ -48,7 +48,7 @@ def generate_mock_schedule():
             "team1": "SRH",
             "team2": "RCB",
             "type": "normal",
-            "create_time": now - timedelta(seconds=5),   # immediate create
+            "create_time": now - timedelta(seconds=5),
             "close_time": now + timedelta(minutes=2),
         },
         {
@@ -69,7 +69,6 @@ def generate_mock_schedule():
         }
     ]
 
-
 MATCH_SCHEDULE = generate_mock_schedule()
 
 
@@ -79,24 +78,22 @@ async def create_poll_auto(bot, match):
     data = load_data()
     match_no = match["match_no"]
 
-    # prevent duplicate poll
     if match_no in data["polls"]:
         return
 
     now = datetime.now()
 
-    # 🔍 DEBUG
-    print(f"[CREATE CHECK] Match {match_no} | now={now} | create={match['create_time']}")
+    print(f"[CREATE CHECK] {match_no} | now={now} | create={match['create_time']}")
 
     if now < match["create_time"]:
         return
 
-    # 🔥 dynamic scoring by type
+    # type-based scoring
     if match["type"] == "normal":
         high, low = 100, 50
     elif match["type"] == "double":
         high, low = 300, 150
-    elif match["type"] == "playoffs":
+    else:
         high, low = 1000, 500
 
     options = [
@@ -116,7 +113,6 @@ async def create_poll_auto(bot, match):
 
         await bot.pin_chat_message(GROUP_ID, message.message_id)
 
-        # 🔥 store poll
         data["polls"][match_no] = {
             "poll_id": message.poll.id,
             "message_id": message.message_id,
@@ -128,7 +124,7 @@ async def create_poll_auto(bot, match):
         }
 
         save_data(data)
-        print(f"✅ CREATED MATCH {match_no} ({match['type']})")
+        print(f"✅ CREATED MATCH {match_no}")
 
     except Exception as e:
         print("❌ CREATE ERROR:", e)
@@ -150,8 +146,7 @@ async def close_poll_auto(bot, match):
 
     now = datetime.now()
 
-    # 🔍 DEBUG
-    print(f"[CLOSE CHECK] Match {match_no} | now={now} | close={match['close_time']}")
+    print(f"[CLOSE CHECK] {match_no} | now={now} | close={match['close_time']}")
 
     if now < match["close_time"]:
         return
@@ -165,6 +160,7 @@ async def close_poll_auto(bot, match):
 
     except Exception as e:
         print("❌ CLOSE ERROR:", e)
+
 
 # ================== VOTE HANDLER ==================
 
@@ -184,16 +180,15 @@ async def handle_vote(update, context):
                     "points": 0
                 }
 
-            if not answer.option_ids:
-                poll["votes"].pop(str(user.id), None)
-            else:
+            if answer.option_ids:
                 poll["votes"][str(user.id)] = answer.option_ids[0]
+            else:
+                poll["votes"].pop(str(user.id), None)
 
             break
 
-    print(f"Vote updated: {user.first_name} -> {answer.option_ids}")
-
     save_data(data)
+    print(f"🗳 Vote saved: {user.first_name} -> {answer.option_ids}")
 
 
 # ================== UPDATE RESULT ==================
@@ -211,6 +206,8 @@ async def update_result(update, context):
 
     data = load_data()
 
+    print("\n====== UPDATE DEBUG ======")
+
     if match_no not in data["polls"]:
         await update.message.reply_text("Invalid match")
         return
@@ -223,19 +220,21 @@ async def update_result(update, context):
 
     options = poll["options"]
     votes = poll["votes"]
+    poll_type = poll.get("type", "normal")
 
-    print("\n====== DEBUG START ======")
-    print(f"Winner Entered: {winner}")
-    print(f"Available Options: {options}")
-    print(f"Votes Mapping: {votes}")
-    print("------------------------")
+    if poll_type == "normal":
+        high, low = 100, 50
+    elif poll_type == "double":
+        high, low = 300, 150
+    else:
+        high, low = 1000, 500
 
-    for uid, user in data["users"].items():
+    for uid in data["users"]:
+        user = data["users"][uid]
         vote = votes.get(uid)
-        name = user["name"]
 
         if vote is None:
-            print(f"{name} → NO VOTE → -25")
+            user["points"] = user.get("points", 0) - (low // 2)
             continue
 
         option_text = options[vote]
@@ -243,53 +242,52 @@ async def update_result(update, context):
         team = team.upper()
         pts = int(pts)
 
-        print(f"{name} chose: {option_text}")
-
         if team == winner:
-            print(f"→ CORRECT (+{pts})")
+            user["points"] = user.get("points", 0) + pts
         else:
-            print(f"→ WRONG (-{pts//2})")
-
-    print("====== DEBUG END ======\n")
+            user["points"] = user.get("points", 0) - (pts // 2)
 
     poll["updated"] = True
     save_data(data)
 
-    # ✅ UNPIN AFTER UPDATE
+    print("UPDATED DATA:", data)
+
+    # unpin
     try:
         await context.bot.unpin_chat_message(GROUP_ID, poll["message_id"])
     except:
         pass
 
-    # ✅ AUTO LEADERBOARD
+    # send leaderboard
     await send_leaderboard(context)
 
-    await update.message.reply_text(f"✅ Match {match_no} updated: {winner}")
+    await update.message.reply_text(f"✅ Match {match_no} updated")
 
 
-# ================== SEND LEADERBOARD ==================
+# ================== LEADERBOARD ==================
 
 async def send_leaderboard(context):
     data = load_data()
 
-    if not data["users"]:
+    users = data.get("users", {})
+
+    if not users:
         await context.bot.send_message(chat_id=GROUP_ID, text="No players yet.")
         return
 
-    users = sorted(data["users"].values(), key=lambda x: x["points"], reverse=True)
+    sorted_users = sorted(users.values(), key=lambda x: x.get("points", 0), reverse=True)
 
     text = "🏆 Leaderboard\n\n"
 
-    for i, user in enumerate(users, 1):
-        text += f"{i}. {user['name']} — {user['points']} pts\n"
+    for i, user in enumerate(sorted_users, 1):
+        text += f"{i}. {user['name']} — {user.get('points',0)} pts\n"
 
     await context.bot.send_message(chat_id=GROUP_ID, text=text)
 
 
-# ================== LEADERBOARD COMMAND ==================
-
 async def leaderboard(update, context):
     await send_leaderboard(context)
+
 
 # ================== SCHEDULER ==================
 
@@ -303,12 +301,8 @@ def scheduler_thread(bot):
             await close_poll_auto(bot, match)
 
     while True:
-        try:
-            loop.run_until_complete(run_all())
-            print("🔁 Scheduler running...")
-        except Exception as e:
-            print("❌ Scheduler error:", e)
-
+        print("🔁 Scheduler running...")
+        loop.run_until_complete(run_all())
         time.sleep(10)
 
 
@@ -319,11 +313,10 @@ def run_web():
         def do_GET(self):
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b"Bot is running")
+            self.wfile.write(b"Bot running")
 
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), Handler)
-    print(f"🌐 Web running on port {port}")
     server.serve_forever()
 
 
