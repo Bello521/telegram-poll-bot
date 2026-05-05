@@ -40,7 +40,7 @@ def save_data(data):
 # ================== MATCH SCHEDULE ==================
 
 def generate_mock_schedule():
-    now = datetime.now() - timedelta(minutes=1)
+    now = datetime.now()
 
     return [
         {
@@ -48,30 +48,26 @@ def generate_mock_schedule():
             "team1": "SRH",
             "team2": "RCB",
             "type": "normal",
-            "create_time": (now + timedelta(minutes=0)).strftime("%H:%M"),
-            "close_time": (now + timedelta(minutes=2)).strftime("%H:%M"),
+            "create_time": now + timedelta(seconds=10),
+            "close_time": now + timedelta(minutes=2),
         },
         {
             "match_no": "2",
             "team1": "CSK",
             "team2": "MI",
             "type": "double",
-            "create_time": (now + timedelta(minutes=4)).strftime("%H:%M"),
-            "close_time": (now + timedelta(minutes=6)).strftime("%H:%M"),
+            "create_time": now + timedelta(minutes=3),
+            "close_time": now + timedelta(minutes=5),
         },
         {
             "match_no": "3",
             "team1": "KKR",
             "team2": "RR",
             "type": "playoffs",
-            "create_time": (now + timedelta(minutes=8)).strftime("%H:%M"),
-            "close_time": (now + timedelta(minutes=10)).strftime("%H:%M"),
+            "create_time": now + timedelta(minutes=6),
+            "close_time": now + timedelta(minutes=8),
         }
     ]
-
-
-MATCH_SCHEDULE = generate_mock_schedule()
-
 
 # ================== CREATE POLL ==================
 
@@ -82,7 +78,7 @@ async def create_poll_auto(bot, match):
     if match_no in data["polls"]:
         return
 
-    now = datetime.now().strftime("%H:%M")
+    now = datetime.now()
 
     if now < match["create_time"]:
         return
