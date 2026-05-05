@@ -34,7 +34,7 @@ def load_data():
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=4)
 
 
 # ================== MATCH SCHEDULE ==================
@@ -163,7 +163,6 @@ async def handle_vote(update, context):
                     "points": 0
                 }
 
-            # vote removed
             if not answer.option_ids:
                 poll["votes"].pop(str(user.id), None)
             else:
@@ -172,7 +171,6 @@ async def handle_vote(update, context):
             break
 
     save_data(data)
-
 
 # ================== UPDATE RESULT (FINAL LOGIC) ==================
 
@@ -202,22 +200,42 @@ async def update_result(update, context):
     options = poll["options"]
     votes = poll["votes"]
 
+    print("====== DEBUG START ======")
+    print("Winner:", winner)
+    print("Options:", options)
+    print("Votes:", votes)
+
     for uid, user in data["users"].items():
         vote = votes.get(uid)
 
-        # NO VOTE
+        name = user["name"]
+
+        # ❌ NO VOTE
         if vote is None:
             user["points"] -= 25
+            print(f"{name} → NO VOTE → -25")
             continue
 
         option_text = options[vote]
-        team = option_text.split()[0].upper()
-        pts = int(option_text.split()[1])
+        parts = option_text.split()
 
+        team = parts[0].upper()
+        pts = int(parts[1])
+
+        print(f"{name} voted: {option_text}")
+
+        # ✅ CORRECT
         if team == winner:
             user["points"] += pts
+            print(f"→ CORRECT +{pts}")
+
+        # ❌ WRONG
         else:
-            user["points"] -= int(pts * 0.5)
+            penalty = int(pts * 0.5)
+            user["points"] -= penalty
+            print(f"→ WRONG -{penalty}")
+
+    print("====== DEBUG END ======")
 
     poll["updated"] = True
     save_data(data)
