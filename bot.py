@@ -4,6 +4,7 @@ import threading
 import time
 import os
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Bot
@@ -49,12 +50,12 @@ def load_schedule():
         create_time = datetime.strptime(
             match["create_time"],
             "%Y-%m-%d %H:%M"
-        )
+        ).replace(tzinfo=ZoneInfo("Asia/Kolkata"))
 
         close_time = datetime.strptime(
             match["close_time"],
             "%Y-%m-%d %H:%M"
-        )
+        ).replace(tzinfo=ZoneInfo("Asia/Kolkata"))
 
         schedule.append({
             "match_no": match["match_no"],
@@ -68,7 +69,6 @@ def load_schedule():
     print("✅ SCHEDULE LOADED")
 
     return schedule
-
 
 # 🔥 IMPORTANT
 MATCH_SCHEDULE = load_schedule()
@@ -84,7 +84,7 @@ async def create_poll_auto(bot, match):
     if match_no in data["polls"]:
         return
 
-    if datetime.now() < match["create_time"]:
+    if datetime.now(ZoneInfo("Asia/Kolkata")) < match["create_time"]:
         return
 
     if match["type"] == "normal":
@@ -154,7 +154,7 @@ async def close_poll_auto(bot, match):
     if poll["closed"]:
         return
 
-    if datetime.now() < match["close_time"]:
+    if datetime.now(ZoneInfo("Asia/Kolkata")) < match["close_time"]:
         return
 
     try:
