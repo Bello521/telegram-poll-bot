@@ -9,7 +9,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from telegram import Bot
+from telegram import Bot, InputFile
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -104,15 +104,6 @@ def load_schedule():
 
     print("✅ SCHEDULE LOADED")
 
-    for match in schedule:
-
-        print(
-            f"📌 Match {match['match_no']} | "
-            f"{match['team1']} vs {match['team2']} | "
-            f"CREATE: {match['create_time']} | "
-            f"CLOSE: {match['close_time']}"
-        )
-
     return schedule
 
 
@@ -127,11 +118,7 @@ async def create_poll_auto(bot, match):
 
     match_no = match["match_no"]
 
-    # already exists
     if match_no in data["polls"]:
-
-        print(f"⚠️ Match {match_no} already exists")
-
         return
 
     current_time = datetime.now(
@@ -143,14 +130,9 @@ async def create_poll_auto(bot, match):
         f"MATCH: {match['create_time']}"
     )
 
-    # wait till correct time
     if current_time < match["create_time"]:
-
-        print(f"⌛ Waiting for Match {match_no}")
-
         return
 
-    # points logic
     if match["type"] == "normal":
 
         high = 100
@@ -169,11 +151,8 @@ async def create_poll_auto(bot, match):
     options = [
 
         f"{match['team1']} {high}",
-
         f"{match['team2']} {high}",
-
         f"{match['team1']} {low}",
-
         f"{match['team2']} {low}"
 
     ]
@@ -198,21 +177,14 @@ async def create_poll_auto(bot, match):
 
         )
 
-        # save BEFORE pin
         data["polls"][match_no] = {
 
             "poll_id": message.poll.id,
-
             "message_id": message.message_id,
-
             "options": options,
-
             "votes": {},
-
             "closed": False,
-
             "updated": False,
-
             "type": match["type"]
 
         }
@@ -222,11 +194,8 @@ async def create_poll_auto(bot, match):
         print(f"✅ POLL SAVED {match_no}")
 
         await bot.pin_chat_message(
-
             GROUP_ID,
-
             message.message_id
-
         )
 
         print(f"📌 PINNED MATCH {match_no}")
@@ -245,36 +214,25 @@ async def close_poll_auto(bot, match):
     match_no = match["match_no"]
 
     if match_no not in data["polls"]:
-
         return
 
     poll = data["polls"][match_no]
 
     if poll["closed"]:
-
         return
 
     current_time = datetime.now(
         ZoneInfo("Asia/Kolkata")
     )
 
-    print(
-        f"🧪 CLOSE CHECK | NOW: {current_time} | "
-        f"CLOSE: {match['close_time']}"
-    )
-
     if current_time < match["close_time"]:
-
         return
 
     try:
 
         await bot.stop_poll(
-
             GROUP_ID,
-
             poll["message_id"]
-
         )
 
         poll["closed"] = True
@@ -313,7 +271,6 @@ async def handle_vote(update, context):
                     data["users"][str(user.id)] = {
 
                         "name": user.first_name,
-
                         "points": 0
 
                     }
@@ -324,19 +281,11 @@ async def handle_vote(update, context):
                         answer.option_ids[0]
                     )
 
-                    print(
-                        f"✅ Vote saved for {user.first_name}"
-                    )
-
                 else:
 
                     poll["votes"].pop(
                         str(user.id),
                         None
-                    )
-
-                    print(
-                        f"❌ Vote removed for {user.first_name}"
                     )
 
                 save_data(data)
@@ -345,15 +294,12 @@ async def handle_vote(update, context):
 
         await asyncio.sleep(1)
 
-    print("❌ Vote failed")
-
 
 # ================== UPDATE RESULT ==================
 
 async def update_result(update, context):
 
     if update.effective_user.id not in ADMIN_IDS:
-
         return
 
     try:
@@ -394,21 +340,15 @@ async def update_result(update, context):
 
     votes = poll["votes"]
 
-    print("\n====== UPDATE DEBUG ======")
-
     for uid in data["users"]:
 
         user = data["users"][uid]
 
         vote = votes.get(uid)
 
-        name = user["name"]
-
         if vote is None:
 
             user["points"] -= 25
-
-            print(f"{name} → NO VOTE → -25")
 
             continue
 
@@ -418,13 +358,9 @@ async def update_result(update, context):
 
         pts = int(pts)
 
-        print(f"{name} voted {option_text}")
-
         if team == winner:
 
             user["points"] += pts
-
-            print(f"→ CORRECT +{pts}")
 
         else:
 
@@ -432,26 +368,16 @@ async def update_result(update, context):
 
             user["points"] -= penalty
 
-            print(f"→ WRONG -{penalty}")
-
     poll["updated"] = True
 
     save_data(data)
 
-    print("====== UPDATE END ======\n")
-
-    # unpin
     try:
 
         await context.bot.unpin_chat_message(
-
             GROUP_ID,
-
             poll["message_id"]
-
         )
-
-        print("📌 UNPIN SUCCESS")
 
     except Exception as e:
 
@@ -490,30 +416,18 @@ async def send_leaderboard(context):
         )
 
         if i == 1:
-
             prefix = "🥇"
 
         elif i == 2:
-
             prefix = "🥈"
 
         elif i == 3:
-
             prefix = "🥉"
 
         else:
-
             prefix = f"{i}."
 
-        pts = user["points"]
-
-        if pts > 0:
-
-            pts_text = f"+{pts}"
-
-        else:
-
-            pts_text = str(pts)
+        pts_text = str(user["points"])
 
         text += (
             f"{prefix} {tag} — "
@@ -530,21 +444,46 @@ async def send_leaderboard(context):
 
     )
 
-    print("🏆 Leaderboard sent")
-
 
 async def leaderboard(update, context):
 
     await send_leaderboard(context)
 
 
-# ================ PING ========================
+# ================== PING ==================
 
 async def ping(update, context):
 
     await update.message.reply_text(
         "🏓 Bot alive"
     )
+
+
+# ================== BACKUP ==================
+
+async def backup(update, context):
+
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    with open("data.json", "rb") as f:
+
+        await context.bot.send_document(
+
+            chat_id=update.effective_chat.id,
+
+            document=InputFile(f),
+
+            filename="data_backup.json"
+
+        )
+
+
+# ================== ERROR HANDLER ==================
+
+async def error_handler(update, context):
+
+    print("❌ TELEGRAM ERROR:", context.error)
 
 
 # ================== SCHEDULER ==================
@@ -567,25 +506,9 @@ def scheduler_thread(bot):
 
         try:
 
-            print("\n🔁 Scheduler running")
-
-            current_time = datetime.now(
-                ZoneInfo("Asia/Kolkata")
-            )
-
-            print("⏰ CURRENT IST:", current_time)
-
-            for match in MATCH_SCHEDULE:
-
-                print(
-                    f"📌 Match {match['match_no']} | "
-                    f"CREATE: {match['create_time']} | "
-                    f"CLOSE: {match['close_time']}"
-                )
+            print("🔁 Scheduler running")
 
             loop.run_until_complete(run_all())
-
-            print("✅ Scheduler cycle completed")
 
         except Exception as e:
 
@@ -635,14 +558,20 @@ def main():
     app.add_handler(
         CommandHandler("leaderboard", leaderboard)
     )
-    
+
     app.add_handler(
         CommandHandler("ping", ping)
     )
 
     app.add_handler(
+        CommandHandler("backup", backup)
+    )
+
+    app.add_handler(
         PollAnswerHandler(handle_vote)
     )
+
+    app.add_error_handler(error_handler)
 
     bot = Bot(TOKEN)
 
@@ -650,10 +579,6 @@ def main():
         target=run_web,
         daemon=True
     ).start()
-
-    print("🌐 WEB THREAD STARTED")
-
-    time.sleep(2)
 
     threading.Thread(
         target=scheduler_thread,
@@ -663,21 +588,11 @@ def main():
 
     print("🚀 STARTING POLLING")
 
-    while True:
+    app.run_polling(
+        drop_pending_updates=True,
+        close_loop=False
+    )
 
-        try:
-
-            app.run_polling(
-                drop_pending_updates=True
-            )
-
-        except Exception as e:
-
-            print("❌ POLLING CRASH:", e)
-
-            print("🔁 Restarting polling in 5 sec")
-
-            time.sleep(5)
 
 if __name__ == "__main__":
 

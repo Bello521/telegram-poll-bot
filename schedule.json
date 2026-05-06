@@ -4,8 +4,8 @@
         "team1": "PBKS",
         "team2": "SRH",
         "type": "normal",
-        "create_time": "2026-05-06 15:39",
-        "close_time": "2026-05-06 15:40"
+        "create_time": "2026-05-06 17:36",
+        "close_time": "2026-05-06 17:37"
     },
    
     {
@@ -13,8 +13,8 @@
         "team1": "DC",
         "team2": "CSK",
         "type": "normal",
-        "create_time": "2026-05-06 15:41",
-        "close_time": "2026-05-06 14:42"
+        "create_time": "2026-05-06 17:38",
+        "close_time": "2026-05-06 17:39"
     },
 
     {
@@ -22,7 +22,7 @@
         "team1": "RCB",
         "team2": "LSG",
         "type": "normal",
-        "create_time": "2026-05-06 15:48",
-        "close_time": "2026-05-06 15:49"
+        "create_time": "2026-05-06 17:40",
+        "close_time": "2026-05-06 17:41"
     }
 ]
