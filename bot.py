@@ -28,7 +28,7 @@ print("🔥 BOT FILE STARTED")
 
 TOKEN = os.getenv("TOKEN")
 
-GROUP_ID = -1003976644783
+GROUP_ID = -1001318414754
 
 ADMIN_IDS = [
     1214956315
@@ -411,7 +411,11 @@ async def send_leaderboard(context):
 
     )
 
-    text = "🏆 <b>Leaderboard</b>\n\n"
+    latest_match = "48"
+
+    text = (
+        "🏆 <b>Leaderboard</b>\n\n"
+    )
 
     for i, (uid, user) in enumerate(users, 1):
 
@@ -438,6 +442,8 @@ async def send_leaderboard(context):
             f"{prefix} {tag} — "
             f"<b>{pts_text}</b> pts\n"
         )
+
+    text += f"\n📌 Updated after Match {latest_match}"
 
     await context.bot.send_message(
 
@@ -582,7 +588,11 @@ def main():
     app.add_error_handler(error_handler)
 
     bot = Bot(TOKEN)
-
+    asyncio.run(
+        bot.delete_webhook(
+            drop_pending_updates=True
+        )
+)
     threading.Thread(
         target=run_web,
         daemon=True
@@ -598,6 +608,7 @@ def main():
 
     print("✅ BOT FULLY STARTED")
 
+asyncio.run(bot.delete_webhook(drop_pending_updates=True))
 
     app.run_polling(
         drop_pending_updates=True,

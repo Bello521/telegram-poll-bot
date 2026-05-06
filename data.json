@@ -1,4 +1,72 @@
 {
-    "users": {},
+    "users": {
+
+        "1507704207": {
+            "name": "Naveen",
+            "points": 2625
+        },
+
+        "1098263402": {
+            "name": "Sohith",
+            "points": 2175
+        },
+
+        "1214956315": {
+            "name": "Praneeth Reddy",
+            "points": 1950
+        },
+
+        "1208094621": {
+            "name": "Chethan Bhairav",
+            "points": 1825
+        },
+
+        "898460291": {
+            "name": "Yajiv",
+            "points": 1650
+        },
+
+        "1361572586": {
+            "name": "Thejo Sai",
+            "points": 1500
+        },
+
+        "1313001039": {
+            "name": "Chaitanya Krishna",
+            "points": 1100
+        },
+
+        "1335028898": {
+            "name": "Siddharth",
+            "points": 1000
+        },
+
+        "782070036": {
+            "name": "Yashwant Undram",
+            "points": 700
+        },
+
+        "1484637238": {
+            "name": "Fardeen",
+            "points": 575
+        },
+
+        "1236345440": {
+            "name": "Gattu Praneeth",
+            "points": 550
+        },
+
+        "1663149418": {
+            "name": "Sudheep SK",
+            "points": 125
+        },
+
+        "1500037518": {
+            "name": "Vardhaman",
+            "points": -225
+        }
+
+    },
+
     "polls": {}
 }
