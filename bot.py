@@ -396,6 +396,7 @@ def scheduler_thread(bot):
             )
 
         loop.run_until_complete(run_all())
+        print("🔁 Scheduler alive")
 
         time.sleep(10)
 
