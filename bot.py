@@ -460,8 +460,12 @@ def main():
     ).start()
 
     print("✅ BOT RUNNING")
+    print("🚀 STARTING POLLING")
 
-    app.run_polling()
+    app.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=[]
+    )
 
 
 if __name__ == "__main__":
