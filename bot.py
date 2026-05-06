@@ -11,12 +11,10 @@ from telegram.ext import Application, CommandHandler, PollAnswerHandler
 
 print("🔥 BOT STARTED")
 
-# ================== CONFIG ==================
-
 TOKEN = os.getenv("TOKEN")
 
-GROUP_ID = -1003976644783   # 🔴 YOUR GROUP ID
-ADMIN_IDS = [1214956315]     # 🔴 YOUR TELEGRAM ID
+GROUP_ID = -1003976644783
+ADMIN_IDS = [1214956315]
 
 DATA_FILE = "data.json"
 
@@ -37,62 +35,60 @@ def save_data(data):
         f.flush()
 
 
-# ================== MATCH SCHEDULE ==================
+# ================== LOAD SCHEDULE ==================
 
-def generate_mock_schedule():
+def load_schedule():
+    with open("schedule.json", "r") as f:
+        raw = json.load(f)
+
     now = datetime.now()
 
-    return [
-        {
-            "match_no": "1",
-            "team1": "SRH",
-            "team2": "RCB",
-            "type": "normal",
-            "create_time": now - timedelta(seconds=5),
-            "close_time": now + timedelta(minutes=2),
-        },
-        {
-            "match_no": "2",
-            "team1": "CSK",
-            "team2": "MI",
-            "type": "double",
-            "create_time": now + timedelta(minutes=3),
-            "close_time": now + timedelta(minutes=5),
-        },
-        {
-            "match_no": "3",
-            "team1": "KKR",
-            "team2": "RR",
-            "type": "playoffs",
-            "create_time": now + timedelta(minutes=6),
-            "close_time": now + timedelta(minutes=8),
-        }
-    ]
+    schedule = []
 
-MATCH_SCHEDULE = generate_mock_schedule()
+    for match in raw:
+        create_time = now + timedelta(minutes=match["create_offset_min"])
+
+        close_time = create_time + timedelta(
+            minutes=match["duration_min"]
+        )
+
+        schedule.append({
+            "match_no": match["match_no"],
+            "team1": match["team1"],
+            "team2": match["team2"],
+            "type": match["type"],
+            "create_time": create_time,
+            "close_time": close_time
+        })
+
+    print("✅ SCHEDULE LOADED")
+    print(schedule)
+
+    return schedule
+
+
+MATCH_SCHEDULE = load_schedule()
 
 
 # ================== CREATE POLL ==================
 
 async def create_poll_auto(bot, match):
     data = load_data()
+
     match_no = match["match_no"]
 
     if match_no in data["polls"]:
         return
 
-    now = datetime.now()
-
-    print(f"[CREATE CHECK] {match_no} | now={now} | create={match['create_time']}")
-
-    if now < match["create_time"]:
+    if datetime.now() < match["create_time"]:
         return
 
-    # type-based scoring
     if match["type"] == "normal":
         high, low = 100, 50
+
     elif match["type"] == "double":
         high, low = 300, 150
+
     else:
         high, low = 1000, 500
 
@@ -104,6 +100,8 @@ async def create_poll_auto(bot, match):
     ]
 
     try:
+        print(f"🟢 Creating Match {match_no}")
+
         message = await bot.send_poll(
             chat_id=GROUP_ID,
             question=f"Match {match_no} ({match['type'].upper()}): {match['team1']} vs {match['team2']}",
@@ -111,6 +109,7 @@ async def create_poll_auto(bot, match):
             is_anonymous=False
         )
 
+        # 🔥 SAVE BEFORE PIN
         data["polls"][match_no] = {
             "poll_id": message.poll.id,
             "message_id": message.message_id,
@@ -123,12 +122,14 @@ async def create_poll_auto(bot, match):
 
         save_data(data)
 
-        print(f"✅ POLL STORED BEFORE PIN: {match_no}")
+        print(f"✅ POLL SAVED {match_no}")
 
-    # 👉 NOW pin AFTER saving
-        await bot.pin_chat_message(GROUP_ID, message.message_id)
+        await bot.pin_chat_message(
+            GROUP_ID,
+            message.message_id
+        )
 
-        print(f"📌 PINNED MATCH {match_no}")
+        print(f"📌 PINNED {match_no}")
 
     except Exception as e:
         print("❌ CREATE ERROR:", e)
@@ -138,6 +139,7 @@ async def create_poll_auto(bot, match):
 
 async def close_poll_auto(bot, match):
     data = load_data()
+
     match_no = match["match_no"]
 
     if match_no not in data["polls"]:
@@ -145,19 +147,20 @@ async def close_poll_auto(bot, match):
 
     poll = data["polls"][match_no]
 
-    if poll.get("closed"):
+    if poll["closed"]:
         return
 
-    now = datetime.now()
-
-    print(f"[CLOSE CHECK] {match_no} | now={now} | close={match['close_time']}")
-
-    if now < match["close_time"]:
+    if datetime.now() < match["close_time"]:
         return
 
     try:
-        await bot.stop_poll(GROUP_ID, poll["message_id"])
+        await bot.stop_poll(
+            GROUP_ID,
+            poll["message_id"]
+        )
+
         poll["closed"] = True
+
         save_data(data)
 
         print(f"⛔ CLOSED MATCH {match_no}")
@@ -166,23 +169,27 @@ async def close_poll_auto(bot, match):
         print("❌ CLOSE ERROR:", e)
 
 
-# ================== VOTE HANDLER ==================
+# ================== HANDLE VOTES ==================
 
 async def handle_vote(update, context):
     answer = update.poll_answer
+
     poll_id = answer.poll_id
     user = answer.user
 
-    print(f"🗳 Incoming vote from {user.first_name} | poll_id={poll_id}")
+    print(f"🗳 Vote from {user.first_name}")
 
-    # 🔁 retry logic (wait for poll to be saved)
+    # 🔥 retry logic
     for _ in range(5):
+
         data = load_data()
 
         for match_no, poll in data["polls"].items():
+
             if poll["poll_id"] == poll_id:
 
                 if str(user.id) not in data["users"]:
+
                     data["users"][str(user.id)] = {
                         "name": user.first_name,
                         "points": 0
@@ -190,35 +197,39 @@ async def handle_vote(update, context):
 
                 if answer.option_ids:
                     poll["votes"][str(user.id)] = answer.option_ids[0]
+
                 else:
                     poll["votes"].pop(str(user.id), None)
 
                 save_data(data)
 
-                print(f"✅ Vote saved: {user.first_name} -> {answer.option_ids}")
+                print(f"✅ Vote saved for {user.first_name}")
+
                 return
 
-        # ⏳ wait before retry
         await asyncio.sleep(1)
 
-    print(f"❌ Vote FAILED (poll not found): {user.first_name}")
+    print("❌ Vote failed")
+
 
 # ================== UPDATE RESULT ==================
 
 async def update_result(update, context):
+
     if update.effective_user.id not in ADMIN_IDS:
         return
 
     try:
         match_no = str(context.args[0])
-        winner = context.args[1].strip().upper()
+        winner = context.args[1].upper()
+
     except:
-        await update.message.reply_text("Usage: /update 1 SRH")
+        await update.message.reply_text(
+            "Usage: /update 49 SRH"
+        )
         return
 
     data = load_data()
-
-    print("\n====== UPDATE DEBUG ======")
 
     if match_no not in data["polls"]:
         await update.message.reply_text("Invalid match")
@@ -226,75 +237,122 @@ async def update_result(update, context):
 
     poll = data["polls"][match_no]
 
-    if poll.get("updated"):
+    if poll["updated"]:
         await update.message.reply_text("Already updated")
         return
 
     options = poll["options"]
     votes = poll["votes"]
-    poll_type = poll.get("type", "normal")
 
-    if poll_type == "normal":
-        high, low = 100, 50
-    elif poll_type == "double":
-        high, low = 300, 150
-    else:
-        high, low = 1000, 500
+    print("\n====== UPDATE DEBUG ======")
 
     for uid in data["users"]:
+
         user = data["users"][uid]
+
         vote = votes.get(uid)
 
+        name = user["name"]
+
         if vote is None:
-            user["points"] = user.get("points", 0) - (low // 2)
+
+            user["points"] -= 25
+
+            print(f"{name} → NO VOTE → -25")
+
             continue
 
         option_text = options[vote]
+
         team, pts = option_text.split()
-        team = team.upper()
+
         pts = int(pts)
 
+        print(f"{name} voted {option_text}")
+
         if team == winner:
-            user["points"] = user.get("points", 0) + pts
+
+            user["points"] += pts
+
+            print(f"→ CORRECT +{pts}")
+
         else:
-            user["points"] = user.get("points", 0) - (pts // 2)
+
+            penalty = pts // 2
+
+            user["points"] -= penalty
+
+            print(f"→ WRONG -{penalty}")
 
     poll["updated"] = True
+
     save_data(data)
 
-    print("UPDATED DATA:", data)
+    print("====== UPDATE END ======\n")
 
-    # unpin
+    # 🔥 unpin
     try:
-        await context.bot.unpin_chat_message(GROUP_ID, poll["message_id"])
+        await context.bot.unpin_chat_message(
+            GROUP_ID,
+            poll["message_id"]
+        )
+
     except:
         pass
 
-    # send leaderboard
+    # 🔥 leaderboard
     await send_leaderboard(context)
 
-    await update.message.reply_text(f"✅ Match {match_no} updated")
+    await update.message.reply_text(
+        f"✅ Match {match_no} updated"
+    )
 
 
 # ================== LEADERBOARD ==================
 
 async def send_leaderboard(context):
+
     data = load_data()
 
-    users = data.get("users", {})
+    users = sorted(
+        data["users"].items(),
+        key=lambda x: x[1]["points"],
+        reverse=True
+    )
 
-    if not users:
-        await context.bot.send_message(chat_id=GROUP_ID, text="No players yet.")
-        return
+    text = "🏆 <b>Leaderboard</b>\n\n"
 
-    sorted_users = sorted(users.values(), key=lambda x: x.get("points", 0), reverse=True)
+    for i, (uid, user) in enumerate(users, 1):
 
-    text = "🏆 Leaderboard\n\n"
+        tag = f'<a href="tg://user?id={uid}">{user["name"]}</a>'
 
-    for i, user in enumerate(sorted_users, 1):
-        text += f"{i}. {user['name']} — {user.get('points',0)} pts\n"
+        if i == 1:
+            prefix = "🥇"
 
-    await context.bot.send_message(chat_id=GROUP_ID, text=text)
+        elif i == 2:
+            prefix = "🥈"
+
+        elif i == 3:
+            prefix = "🥉"
+
+        else:
+            prefix = f"{i}."
+
+        pts = user["points"]
+
+        if pts > 0:
+            pts_text = f"+{pts}"
+
+        else:
+            pts_text = str(pts)
+
+        text += f"{prefix} {tag} — <b>{pts_text}</b> pts\n"
+
+    await context.bot.send_message(
+        GROUP_ID,
+        text,
+        parse_mode="HTML"
+    )
 
 
 async def leaderboard(update, context):
@@ -304,55 +362,82 @@ async def leaderboard(update, context):
 # ================== SCHEDULER ==================
 
 def scheduler_thread(bot):
+
     loop = asyncio.new_event_loop()
+
     asyncio.set_event_loop(loop)
 
     async def run_all():
+
         for match in MATCH_SCHEDULE:
+
             await create_poll_auto(bot, match)
+
             await close_poll_auto(bot, match)
 
     while True:
-        print("🔁 Scheduler running...")
+
+        print("🔁 Scheduler running")
+
         loop.run_until_complete(run_all())
+
         time.sleep(10)
 
 
 # ================== WEB SERVER ==================
 
 def run_web():
-    from http.server import BaseHTTPRequestHandler, HTTPServer
 
     class Handler(BaseHTTPRequestHandler):
+
         def do_GET(self):
+
             self.send_response(200)
-            self.send_header("Content-type", "text/plain")
+
             self.end_headers()
-            self.wfile.write(b"Bot is alive")
+
+            self.wfile.write(b"Bot running")
 
     port = int(os.environ.get("PORT", 10000))
 
-    print(f"🌐 Starting web server on port {port}")
+    print(f"🌐 WEB RUNNING ON {port}")
 
-    try:
-        server = HTTPServer(("0.0.0.0", port), Handler)
-        server.serve_forever()
-    except Exception as e:
-        print("❌ WEB SERVER ERROR:", e)
+    HTTPServer(
+        ("0.0.0.0", port),
+        Handler
+    ).serve_forever()
+
 
 # ================== MAIN ==================
 
 def main():
+
     app = Application.builder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("update", update_result))
-    app.add_handler(CommandHandler("leaderboard", leaderboard))
-    app.add_handler(PollAnswerHandler(handle_vote))
+    app.add_handler(
+        CommandHandler("update", update_result)
+    )
+
+    app.add_handler(
+        CommandHandler("leaderboard", leaderboard)
+    )
+
+    app.add_handler(
+        PollAnswerHandler(handle_vote)
+    )
 
     bot = Bot(TOKEN)
 
-    threading.Thread(target=run_web, daemon=True).start()
-    threading.Thread(target=scheduler_thread, args=(bot,), daemon=True).start()
+    threading.Thread(
+        target=run_web,
+        daemon=True
+    ).start()
+
+    threading.Thread(
+        target=scheduler_thread,
+        args=(bot,),
+        daemon=True
+    ).start()
 
     print("✅ BOT RUNNING")
 
