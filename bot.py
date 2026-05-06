@@ -538,6 +538,15 @@ async def leaderboard(update, context):
     await send_leaderboard(context)
 
 
+# ================ PING ========================
+
+async def ping(update, context):
+
+    await update.message.reply_text(
+        "🏓 Bot alive"
+    )
+
+
 # ================== SCHEDULER ==================
 
 def scheduler_thread(bot):
@@ -626,6 +635,10 @@ def main():
     app.add_handler(
         CommandHandler("leaderboard", leaderboard)
     )
+    
+    app.add_handler(
+        CommandHandler("ping", ping)
+    )
 
     app.add_handler(
         PollAnswerHandler(handle_vote)
@@ -634,11 +647,8 @@ def main():
     bot = Bot(TOKEN)
 
     threading.Thread(
-
         target=run_web,
-
         daemon=True
-
     ).start()
 
     print("🌐 WEB THREAD STARTED")
@@ -646,21 +656,28 @@ def main():
     time.sleep(2)
 
     threading.Thread(
-
         target=scheduler_thread,
-
         args=(bot,),
-
         daemon=True
-
     ).start()
 
     print("🚀 STARTING POLLING")
 
-    app.run_polling(
-        drop_pending_updates=True
-    )
+    while True:
 
+        try:
+
+            app.run_polling(
+                drop_pending_updates=True
+            )
+
+        except Exception as e:
+
+            print("❌ POLLING CRASH:", e)
+
+            print("🔁 Restarting polling in 5 sec")
+
+            time.sleep(5)
 
 if __name__ == "__main__":
 
