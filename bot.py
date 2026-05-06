@@ -38,18 +38,22 @@ def save_data(data):
 # ================== LOAD SCHEDULE ==================
 
 def load_schedule():
+
     with open("schedule.json", "r") as f:
         raw = json.load(f)
-
-    now = datetime.now()
 
     schedule = []
 
     for match in raw:
-        create_time = now + timedelta(minutes=match["create_offset_min"])
 
-        close_time = create_time + timedelta(
-            minutes=match["duration_min"]
+        create_time = datetime.strptime(
+            match["create_time"],
+            "%Y-%m-%d %H:%M"
+        )
+
+        close_time = datetime.strptime(
+            match["close_time"],
+            "%Y-%m-%d %H:%M"
         )
 
         schedule.append({
@@ -65,10 +69,6 @@ def load_schedule():
     print(schedule)
 
     return schedule
-
-
-MATCH_SCHEDULE = load_schedule()
-
 
 # ================== CREATE POLL ==================
 
