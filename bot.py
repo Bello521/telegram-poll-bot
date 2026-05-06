@@ -1,21 +1,33 @@
+
 import json
 import asyncio
 import threading
 import time
 import os
-from datetime import datetime, timedelta
+
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Bot
-from telegram.ext import Application, CommandHandler, PollAnswerHandler
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    PollAnswerHandler
+)
 
-print("🔥 BOT STARTED")
+print("🔥 BOT FILE STARTED")
+
+
+# ================== CONFIG ==================
 
 TOKEN = os.getenv("TOKEN")
 
 GROUP_ID = -1003976644783
-ADMIN_IDS = [1214956315]
+
+ADMIN_IDS = [
+    1214956315
+]
 
 DATA_FILE = "data.json"
 
@@ -23,16 +35,26 @@ DATA_FILE = "data.json"
 # ================== DATA ==================
 
 def load_data():
+
     try:
+
         with open(DATA_FILE, "r") as f:
             return json.load(f)
+
     except:
-        return {"users": {}, "polls": {}}
+
+        return {
+            "users": {},
+            "polls": {}
+        }
 
 
 def save_data(data):
+
     with open(DATA_FILE, "w") as f:
+
         json.dump(data, f, indent=4)
+
         f.flush()
 
 
@@ -40,7 +62,10 @@ def save_data(data):
 
 def load_schedule():
 
+    print("📂 Loading schedule.json")
+
     with open("schedule.json", "r") as f:
+
         raw = json.load(f)
 
     schedule = []
@@ -50,78 +75,146 @@ def load_schedule():
         create_time = datetime.strptime(
             match["create_time"],
             "%Y-%m-%d %H:%M"
-        ).replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+        ).replace(
+            tzinfo=ZoneInfo("Asia/Kolkata")
+        )
 
         close_time = datetime.strptime(
             match["close_time"],
             "%Y-%m-%d %H:%M"
-        ).replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+        ).replace(
+            tzinfo=ZoneInfo("Asia/Kolkata")
+        )
 
         schedule.append({
+
             "match_no": match["match_no"],
+
             "team1": match["team1"],
+
             "team2": match["team2"],
+
             "type": match["type"],
+
             "create_time": create_time,
+
             "close_time": close_time
+
         })
 
     print("✅ SCHEDULE LOADED")
 
+    for match in schedule:
+
+        print(
+            f"📌 Match {match['match_no']} | "
+            f"{match['team1']} vs {match['team2']} | "
+            f"CREATE: {match['create_time']} | "
+            f"CLOSE: {match['close_time']}"
+        )
+
     return schedule
 
-# 🔥 IMPORTANT
+
 MATCH_SCHEDULE = load_schedule()
 
 
 # ================== CREATE POLL ==================
 
 async def create_poll_auto(bot, match):
+
     data = load_data()
 
     match_no = match["match_no"]
 
+    # already exists
     if match_no in data["polls"]:
+
+        print(f"⚠️ Match {match_no} already exists")
+
         return
 
-    if datetime.now(ZoneInfo("Asia/Kolkata")) < match["create_time"]:
+    current_time = datetime.now(
+        ZoneInfo("Asia/Kolkata")
+    )
+
+    print(
+        f"🧪 CREATE CHECK | NOW: {current_time} | "
+        f"MATCH: {match['create_time']}"
+    )
+
+    # wait till correct time
+    if current_time < match["create_time"]:
+
+        print(f"⌛ Waiting for Match {match_no}")
+
         return
 
+    # points logic
     if match["type"] == "normal":
-        high, low = 100, 50
+
+        high = 100
+        low = 50
 
     elif match["type"] == "double":
-        high, low = 300, 150
+
+        high = 300
+        low = 150
 
     else:
-        high, low = 1000, 500
+
+        high = 1000
+        low = 500
 
     options = [
+
         f"{match['team1']} {high}",
+
         f"{match['team2']} {high}",
+
         f"{match['team1']} {low}",
+
         f"{match['team2']} {low}"
+
     ]
 
     try:
+
         print(f"🟢 Creating Match {match_no}")
 
         message = await bot.send_poll(
+
             chat_id=GROUP_ID,
-            question=f"Match {match_no} ({match['type'].upper()}): {match['team1']} vs {match['team2']}",
+
+            question=(
+                f"Match {match_no} "
+                f"({match['type'].upper()})\n"
+                f"{match['team1']} vs {match['team2']}"
+            ),
+
             options=options,
+
             is_anonymous=False
+
         )
 
-        # 🔥 SAVE BEFORE PIN
+        # save BEFORE pin
         data["polls"][match_no] = {
+
             "poll_id": message.poll.id,
+
             "message_id": message.message_id,
+
             "options": options,
+
             "votes": {},
+
             "closed": False,
+
             "updated": False,
+
             "type": match["type"]
+
         }
 
         save_data(data)
@@ -129,38 +222,59 @@ async def create_poll_auto(bot, match):
         print(f"✅ POLL SAVED {match_no}")
 
         await bot.pin_chat_message(
+
             GROUP_ID,
+
             message.message_id
+
         )
 
-        print(f"📌 PINNED {match_no}")
+        print(f"📌 PINNED MATCH {match_no}")
 
     except Exception as e:
+
         print("❌ CREATE ERROR:", e)
 
 
 # ================== CLOSE POLL ==================
 
 async def close_poll_auto(bot, match):
+
     data = load_data()
 
     match_no = match["match_no"]
 
     if match_no not in data["polls"]:
+
         return
 
     poll = data["polls"][match_no]
 
     if poll["closed"]:
+
         return
 
-    if datetime.now(ZoneInfo("Asia/Kolkata")) < match["close_time"]:
+    current_time = datetime.now(
+        ZoneInfo("Asia/Kolkata")
+    )
+
+    print(
+        f"🧪 CLOSE CHECK | NOW: {current_time} | "
+        f"CLOSE: {match['close_time']}"
+    )
+
+    if current_time < match["close_time"]:
+
         return
 
     try:
+
         await bot.stop_poll(
+
             GROUP_ID,
+
             poll["message_id"]
+
         )
 
         poll["closed"] = True
@@ -170,20 +284,22 @@ async def close_poll_auto(bot, match):
         print(f"⛔ CLOSED MATCH {match_no}")
 
     except Exception as e:
+
         print("❌ CLOSE ERROR:", e)
 
 
 # ================== HANDLE VOTES ==================
 
 async def handle_vote(update, context):
+
     answer = update.poll_answer
 
     poll_id = answer.poll_id
+
     user = answer.user
 
     print(f"🗳 Vote from {user.first_name}")
 
-    # 🔥 retry logic
     for _ in range(5):
 
         data = load_data()
@@ -195,19 +311,35 @@ async def handle_vote(update, context):
                 if str(user.id) not in data["users"]:
 
                     data["users"][str(user.id)] = {
+
                         "name": user.first_name,
+
                         "points": 0
+
                     }
 
                 if answer.option_ids:
-                    poll["votes"][str(user.id)] = answer.option_ids[0]
+
+                    poll["votes"][str(user.id)] = (
+                        answer.option_ids[0]
+                    )
+
+                    print(
+                        f"✅ Vote saved for {user.first_name}"
+                    )
 
                 else:
-                    poll["votes"].pop(str(user.id), None)
+
+                    poll["votes"].pop(
+                        str(user.id),
+                        None
+                    )
+
+                    print(
+                        f"❌ Vote removed for {user.first_name}"
+                    )
 
                 save_data(data)
-
-                print(f"✅ Vote saved for {user.first_name}")
 
                 return
 
@@ -221,31 +353,45 @@ async def handle_vote(update, context):
 async def update_result(update, context):
 
     if update.effective_user.id not in ADMIN_IDS:
+
         return
 
     try:
+
         match_no = str(context.args[0])
+
         winner = context.args[1].upper()
 
     except:
+
         await update.message.reply_text(
             "Usage: /update 49 SRH"
         )
+
         return
 
     data = load_data()
 
     if match_no not in data["polls"]:
-        await update.message.reply_text("Invalid match")
+
+        await update.message.reply_text(
+            "Invalid match"
+        )
+
         return
 
     poll = data["polls"][match_no]
 
     if poll["updated"]:
-        await update.message.reply_text("Already updated")
+
+        await update.message.reply_text(
+            "Already updated"
+        )
+
         return
 
     options = poll["options"]
+
     votes = poll["votes"]
 
     print("\n====== UPDATE DEBUG ======")
@@ -294,17 +440,23 @@ async def update_result(update, context):
 
     print("====== UPDATE END ======\n")
 
-    # 🔥 unpin
+    # unpin
     try:
+
         await context.bot.unpin_chat_message(
+
             GROUP_ID,
+
             poll["message_id"]
+
         )
 
-    except:
-        pass
+        print("📌 UNPIN SUCCESS")
 
-    # 🔥 leaderboard
+    except Exception as e:
+
+        print("❌ UNPIN ERROR:", e)
+
     await send_leaderboard(context)
 
     await update.message.reply_text(
@@ -319,47 +471,70 @@ async def send_leaderboard(context):
     data = load_data()
 
     users = sorted(
+
         data["users"].items(),
+
         key=lambda x: x[1]["points"],
+
         reverse=True
+
     )
 
     text = "🏆 <b>Leaderboard</b>\n\n"
 
     for i, (uid, user) in enumerate(users, 1):
 
-        tag = f'<a href="tg://user?id={uid}">{user["name"]}</a>'
+        tag = (
+            f'<a href="tg://user?id={uid}">'
+            f'{user["name"]}</a>'
+        )
 
         if i == 1:
+
             prefix = "🥇"
 
         elif i == 2:
+
             prefix = "🥈"
 
         elif i == 3:
+
             prefix = "🥉"
 
         else:
+
             prefix = f"{i}."
 
         pts = user["points"]
 
         if pts > 0:
+
             pts_text = f"+{pts}"
 
         else:
+
             pts_text = str(pts)
 
-        text += f"{prefix} {tag} — <b>{pts_text}</b> pts\n"
+        text += (
+            f"{prefix} {tag} — "
+            f"<b>{pts_text}</b> pts\n"
+        )
 
     await context.bot.send_message(
+
         GROUP_ID,
+
         text,
+
         parse_mode="HTML"
+
     )
+
+    print("🏆 Leaderboard sent")
 
 
 async def leaderboard(update, context):
+
     await send_leaderboard(context)
 
 
@@ -381,22 +556,31 @@ def scheduler_thread(bot):
 
     while True:
 
-        print("\n🔁 Scheduler running")
+        try:
 
-        current_time = datetime.now(
-            ZoneInfo("Asia/Kolkata")
-        )
+            print("\n🔁 Scheduler running")
 
-        print("⏰ CURRENT IST:", current_time)
-
-        for match in MATCH_SCHEDULE:
-
-            print(
-               f"Match {match['match_no']} create at {match['create_time']}"
+            current_time = datetime.now(
+                ZoneInfo("Asia/Kolkata")
             )
 
-        loop.run_until_complete(run_all())
-        print("🔁 Scheduler alive")
+            print("⏰ CURRENT IST:", current_time)
+
+            for match in MATCH_SCHEDULE:
+
+                print(
+                    f"📌 Match {match['match_no']} | "
+                    f"CREATE: {match['create_time']} | "
+                    f"CLOSE: {match['close_time']}"
+                )
+
+            loop.run_until_complete(run_all())
+
+            print("✅ Scheduler cycle completed")
+
+        except Exception as e:
+
+            print("❌ Scheduler Error:", e)
 
         time.sleep(10)
 
@@ -415,7 +599,9 @@ def run_web():
 
             self.wfile.write(b"Bot running")
 
-    port = int(os.environ.get("PORT", 10000))
+    port = int(
+        os.environ.get("PORT", 10000)
+    )
 
     print(f"🌐 WEB RUNNING ON {port}")
 
@@ -428,6 +614,8 @@ def run_web():
 # ================== MAIN ==================
 
 def main():
+
+    print("🔥 Bot starting")
 
     app = Application.builder().token(TOKEN).build()
 
@@ -446,27 +634,34 @@ def main():
     bot = Bot(TOKEN)
 
     threading.Thread(
+
         target=run_web,
+
         daemon=True
+
     ).start()
+
     print("🌐 WEB THREAD STARTED")
 
     time.sleep(2)
 
     threading.Thread(
+
         target=scheduler_thread,
+
         args=(bot,),
+
         daemon=True
+
     ).start()
 
-    print("✅ BOT RUNNING")
     print("🚀 STARTING POLLING")
 
     app.run_polling(
-        drop_pending_updates=True,
-        allowed_updates=[]
+        drop_pending_updates=True
     )
 
 
 if __name__ == "__main__":
+
     main()
