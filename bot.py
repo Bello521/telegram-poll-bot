@@ -4,6 +4,7 @@ import asyncio
 import threading
 import time
 import os
+import logging
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -14,6 +15,10 @@ from telegram.ext import (
     Application,
     CommandHandler,
     PollAnswerHandler
+)
+
+logging.basicConfig(
+    level=logging.INFO
 )
 
 print("🔥 BOT FILE STARTED")
@@ -483,8 +488,11 @@ async def backup(update, context):
 
 async def error_handler(update, context):
 
-    print("❌ TELEGRAM ERROR:", context.error)
+    print("\n❌ TELEGRAM ERROR ❌")
 
+    print(context.error)
+
+    print("❌ END ERROR ❌\n")
 
 # ================== SCHEDULER ==================
 
@@ -591,6 +599,7 @@ def main():
     app.run_polling(
         drop_pending_updates=True,
         close_loop=False
+        allowed_updates=None
     )
 
 
