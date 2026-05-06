@@ -589,12 +589,6 @@ def main():
 
     bot = Bot(TOKEN)
 
-    asyncio.run(
-        bot.delete_webhook(
-            drop_pending_updates=True
-        )
-    )
-
     threading.Thread(
         target=run_web,
         daemon=True
@@ -609,6 +603,10 @@ def main():
     print("🚀 STARTING POLLING")
 
     print("✅ BOT FULLY STARTED")
+
+    asyncio.set_event_loop(
+        asyncio.new_event_loop()
+    )
 
     app.run_polling(
         drop_pending_updates=True,
