@@ -596,9 +596,12 @@ def main():
 
     print("🚀 STARTING POLLING")
 
+    print("✅ BOT FULLY STARTED")
+
+
     app.run_polling(
         drop_pending_updates=True,
-        close_loop=False
+        close_loop=False,
         allowed_updates=None
     )
 
