@@ -66,9 +66,13 @@ def load_schedule():
         })
 
     print("✅ SCHEDULE LOADED")
-    print(schedule)
 
     return schedule
+
+
+# 🔥 IMPORTANT
+MATCH_SCHEDULE = load_schedule()
+
 
 # ================== CREATE POLL ==================
 
@@ -432,6 +436,9 @@ def main():
         target=run_web,
         daemon=True
     ).start()
+    print("🌐 WEB THREAD STARTED")
+
+    time.sleep(2)
 
     threading.Thread(
         target=scheduler_thread,
