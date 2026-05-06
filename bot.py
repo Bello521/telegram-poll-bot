@@ -381,7 +381,19 @@ def scheduler_thread(bot):
 
     while True:
 
-        print("🔁 Scheduler running")
+        print("\n🔁 Scheduler running")
+
+        current_time = datetime.now(
+            ZoneInfo("Asia/Kolkata")
+        )
+
+        print("⏰ CURRENT IST:", current_time)
+
+        for match in MATCH_SCHEDULE:
+
+            print(
+               f"Match {match['match_no']} create at {match['create_time']}"
+            )
 
         loop.run_until_complete(run_all())
 
