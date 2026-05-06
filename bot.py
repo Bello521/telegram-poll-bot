@@ -588,11 +588,13 @@ def main():
     app.add_error_handler(error_handler)
 
     bot = Bot(TOKEN)
+
     asyncio.run(
         bot.delete_webhook(
             drop_pending_updates=True
         )
-)
+    )
+
     threading.Thread(
         target=run_web,
         daemon=True
@@ -607,8 +609,6 @@ def main():
     print("🚀 STARTING POLLING")
 
     print("✅ BOT FULLY STARTED")
-
-asyncio.run(bot.delete_webhook(drop_pending_updates=True))
 
     app.run_polling(
         drop_pending_updates=True,
