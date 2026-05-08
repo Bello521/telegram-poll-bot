@@ -1,2 +1,4 @@
-python-telegram-bot==20.7
-schedule
+python-telegram-bot[job-queue,webhooks]==20.7
+tzdata
+pymongo[srv]
+python-dotenv
