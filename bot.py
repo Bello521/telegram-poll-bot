@@ -483,6 +483,39 @@ async def error_handler(update, context):
     )
     print("\n❌ END ERROR ❌\n")
 
+#======================= check vote============
+
+async def check_vote(update, context):
+    try:
+        try:
+            match_no = str(context.args[0])
+        except:
+            await update.message.reply_text("Usage: /checkvote 53")
+            return
+
+        data = load_data()
+        uid = str(update.effective_user.id)
+        
+        if match_no not in data["polls"]:
+            await update.message.reply_text("Invalid match number.")
+            return
+            
+        poll = data["polls"][match_no]
+        votes = poll.get("votes", {})
+        
+        # Check all ID formats
+        vote = votes.get(uid) or votes.get(int(uid))
+        
+        if vote is None:
+            await update.message.reply_text(f"❌ Match {match_no}: The database says you DID NOT VOTE.")
+        else:
+            option_text = poll["options"][vote]
+            await update.message.reply_text(f"✅ Match {match_no}: Your saved vote is -> {option_text}")
+            
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
+
 # ================== MAIN ==================
 
 def main():
@@ -497,6 +530,7 @@ def main():
     app.add_handler(CommandHandler("backup", backup))
     app.add_handler(PollAnswerHandler(handle_vote))
     app.add_error_handler(error_handler)
+    app.add_handler(CommandHandler("checkvote", check_vote))
 
     app.job_queue.run_repeating(scheduler, interval=10, first=5)
     app.job_queue.run_repeating(keep_alive, interval=300, first=10)
