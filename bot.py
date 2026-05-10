@@ -575,24 +575,27 @@ async def error_handler(update, context):
 
 # ================== RETRO FIX (BULK BATCH PROCESSING) ==================
 
+# ================== RETRO FIX (BULK BATCH PROCESSING - FIXED) ==================
+
 async def retro_fix(update, context):
     try:
         # 1. Security Check
         if update.effective_user.id not in ADMIN_IDS:
             return
 
-        # 2. Parse arguments (Now accepts unlimited User IDs!)
-        if len(context.args) < 4:
+        # 2. Parse arguments (Now includes the Points!)
+        if len(context.args) < 5:
             await update.message.reply_text(
-                "Usage: /retrofix [Match_No] [Voted_Team] [Actual_Winner] [User1] [User2] ...\n"
-                "Example: /retrofix 53 KKR KKR 12345678 87654321 11223344"
+                "Usage: /retrofix [Match_No] [Voted_Team] [Points] [Actual_Winner] [User1] [User2] ...\n"
+                "Example: /retrofix 53 KKR 150 KKR 12345678 87654321"
             )
             return
 
         match_no = str(context.args[0])
         voted_team = context.args[1].upper()
-        winner = context.args[2].upper()
-        user_ids = context.args[3:] # Grabs every ID you pasted after the teams!
+        voted_points = str(context.args[2]) # Added points!
+        winner = context.args[3].upper()
+        user_ids = context.args[4:] # Grabs every ID you pasted after the teams/points!
 
         data = load_data()
 
@@ -603,15 +606,17 @@ async def retro_fix(update, context):
         poll = data["polls"][match_no]
         options = poll["options"]
 
-        # 3. Find the matching option
+        # 3. Find the EXACT matching option (e.g., "KKR 150")
         target_option_index = None
+        target_text = f"{voted_team} {voted_points}"
+        
         for i, opt in enumerate(options):
-            if opt.startswith(voted_team):
+            if opt == target_text:
                 target_option_index = i
                 break 
 
         if target_option_index is None:
-            await update.message.reply_text(f"Team {voted_team} not found in poll options.")
+            await update.message.reply_text(f"Exact option '{target_text}' not found in poll options.")
             return
 
         # 4. Calculate Points
