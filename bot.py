@@ -213,32 +213,40 @@ async def scheduler(context):
 # ================== HANDLE VOTES ==================
 
 async def handle_vote(update, context):
+    # The lock prevents the race condition
     async with vote_lock: 
-    try:
-        answer = update.poll_answer
-        poll_id = answer.poll_id
-        user = answer.user
-        data = load_data()
+        # Notice how 'try' is pushed inward 4 spaces!
+        try:
+            answer = update.poll_answer
+            poll_id = answer.poll_id
+            user = answer.user
+            data = load_data()
 
-        for match_no, poll in data["polls"].items():
-            if poll["poll_id"] == poll_id:
-                if str(user.id) not in data["users"]:
-                    data["users"][str(user.id)] = {
-                        "name": user.first_name,
-                        "points": 0
-                    }
+            for match_no, poll in data["polls"].items():
+                if poll["poll_id"] == poll_id:
+                    # Check if user exists in database
+                    if str(user.id) not in data["users"]:
+                        data["users"][str(user.id)] = {
+                            "name": user.first_name,
+                            "points": 0
+                        }
 
-                if answer.option_ids:
-                    poll["votes"][str(user.id)] = answer.option_ids[0]
-                else:
-                    poll["votes"].pop(str(user.id), None)
+                    # Record or remove their vote
+                    if answer.option_ids:
+                        poll["votes"][str(user.id)] = answer.option_ids[0]
+                    else:
+                        poll["votes"].pop(str(user.id), None)
 
-                save_data(data)
-                print(f"🗳 Vote recorded for {user.first_name}")
-                return
-    except:
-        print("❌ VOTE ERROR")
-        traceback.print_exc()
+                    # Save database
+                    save_data(data)
+                    print(f"🗳 Vote recorded for {user.first_name}")
+                    return
+                    
+        except Exception:
+            # Notice how 'except' lines up perfectly underneath 'try'
+            print("❌ VOTE ERROR")
+            import traceback
+            traceback.print_exc()
 
 # ================== UPDATE RESULT ==================
 
