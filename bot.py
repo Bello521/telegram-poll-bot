@@ -248,21 +248,34 @@ async def update_result(update, context):
             match_no = str(context.args[0])
             winner = context.args[1].upper()
         except:
-            await update.message.reply_text("Usage: /update 49 SRH")
+            await update.message.reply_text("Usage: /update 53 SRH")
             return
 
         data = load_data()
-
         if match_no not in data["polls"]:
             await update.message.reply_text("Invalid match")
             return
 
         poll = data["polls"][match_no]
-
         if poll["updated"]:
-            await update.message.reply_text("Already updated")
+            await update.message.reply_text("Already updated. Use /undo first.")
             return
 
+        # 1. Get match type from schedule to determine points/penalty
+        match_info = next((m for m in MATCH_SCHEDULE if m["match_no"] == match_no), None)
+        if not match_info:
+            await update.message.reply_text("Match not found in schedule.json")
+            return
+
+        if match_info["type"] == "normal":
+            high, low = 100, 50
+        elif match_info["type"] == "double":
+            high, low = 300, 150
+        else: # special/playoffs
+            high, low = 1000, 500
+
+        penalty = low // 2  # This is the 50% of low points logic
+        
         options = poll["options"]
         votes = poll["votes"]
 
@@ -270,13 +283,15 @@ async def update_result(update, context):
             user = data["users"][uid]
             vote = votes.get(uid)
 
+            # --- NO VOTE PENALTY ---
             if vote is None:
-                user["points"] -= 25
+                user["points"] -= penalty
                 continue
 
+            # --- CALCULATE WIN/LOSS ---
             option_text = options[vote]
-            team, pts = option_text.split()
-            pts = int(pts)
+            team, _ = option_text.split()
+            pts = high if vote < 2 else low
 
             if team == winner:
                 user["points"] += pts
@@ -292,10 +307,66 @@ async def update_result(update, context):
             pass
 
         await send_leaderboard(context)
-        await update.message.reply_text(f"✅ Match {match_no} updated")
+        await update.message.reply_text(f"✅ Match {match_no} ({match_info['type'].upper()}) updated.\nPenalty applied: -{penalty}")
 
-    except:
-        print("❌ UPDATE ERROR")
+    except Exception:
+        traceback.print_exc()
+# =============== UNDO_UPDATE ===================
+
+async def undo_update(update, context):
+    try:
+        if update.effective_user.id not in ADMIN_IDS:
+            return
+
+        try:
+            match_no = str(context.args[0])
+            prev_winner = context.args[1].upper()
+        except:
+            await update.message.reply_text("Usage: /undo 53 SRH")
+            return
+
+        data = load_data()
+        poll = data["polls"].get(match_no)
+
+        if not poll or not poll["updated"]:
+            await update.message.reply_text("Nothing to undo.")
+            return
+
+        match_info = next((m for m in MATCH_SCHEDULE if m["match_no"] == match_no), None)
+        if match_info["type"] == "normal":
+            high, low = 100, 50
+        elif match_info["type"] == "double":
+            high, low = 300, 150
+        else:
+            high, low = 1000, 500
+
+        penalty = low // 2
+        
+        options = poll["options"]
+        votes = poll["votes"]
+
+        for uid in data["users"]:
+            user = data["users"][uid]
+            vote = votes.get(uid)
+
+            if vote is None:
+                user["points"] += penalty
+                continue
+
+            option_text = options[vote]
+            team, _ = option_text.split()
+            pts = high if vote < 2 else low
+
+            if team == prev_winner:
+                user["points"] -= pts
+            else:
+                user["points"] += pts // 2
+
+        poll["updated"] = False
+        save_data(data)
+        await update.message.reply_text(f"♻️ Match {match_no} reverted. Leaderboard fixed.")
+
+    except Exception:
         traceback.print_exc()
 
 # ================== LEADERBOARD ==================
