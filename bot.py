@@ -277,14 +277,19 @@ async def update_result(update, context):
         options = poll["options"]
         votes = poll["votes"]
 
-        # Dynamic Math
+        # --- DIAGNOSTIC PRINT 1 ---
+        print(f"\n🔍 DEBUG MATCH {match_no}:")
+        print(f"Total votes in database for this match: {len(votes)}")
+        print(f"Raw Votes Dictionary: {votes}\n")
+        # --------------------------
+
         low_points = int(options[2].split()[1])
         no_vote_penalty = low_points // 2 
 
         for uid in list(data["users"].keys()):
             user = data["users"][uid]
             
-            # --- THE BULLETPROOF ID CHECK ---
+            # THE BULLETPROOF ID CHECK
             vote = votes.get(uid)
             if vote is None:
                 vote = votes.get(str(uid))
@@ -294,12 +299,15 @@ async def update_result(update, context):
                 except:
                     pass
 
-            # 1. NO VOTE LOGIC
+            # NO VOTE LOGIC
             if vote is None:
+                # --- DIAGNOSTIC PRINT 2 ---
+                print(f"❌ NO VOTE FOUND FOR: {user.get('name', 'Unknown')} (ID: '{uid}')")
+                # --------------------------
                 user["points"] -= no_vote_penalty
                 continue
 
-            # 2. VOTE CALCULATIONS
+            # VOTE CALCULATIONS
             option_text = options[vote]
             team, pts_str = option_text.split()
             pts = int(pts_str)
@@ -318,11 +326,12 @@ async def update_result(update, context):
             pass
 
         await send_leaderboard(context)
-        await update.message.reply_text(f"✅ Match {match_no} updated successfully!\nNo-vote penalty applied: -{no_vote_penalty}")
+        await update.message.reply_text(f"✅ Match {match_no} updated! (Check Render logs for debug info)")
 
     except Exception:
         import traceback
         traceback.print_exc()
+
 
 # =============== UNDO_UPDATE ===================
 
