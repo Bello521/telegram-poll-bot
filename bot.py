@@ -16,6 +16,8 @@ from telegram.ext import (
     PollAnswerHandler
 )
 
+vote_lock = asyncio.Lock()
+
 # Load environment variables (from .env locally, or Render Dashboard)
 load_dotenv()
 
@@ -211,6 +213,7 @@ async def scheduler(context):
 # ================== HANDLE VOTES ==================
 
 async def handle_vote(update, context):
+    async with vote_lock: 
     try:
         answer = update.poll_answer
         poll_id = answer.poll_id
@@ -266,15 +269,22 @@ async def update_result(update, context):
         options = poll["options"]
         votes = poll["votes"]
 
-        # --- THE GENIUS PART ---
-        # We find the "low" points by looking at the 3rd option (index 2)
-        # E.g., if options[2] is "KKR 150", splitting it gives us "150"
+        # Dynamic Math
         low_points = int(options[2].split()[1])
         no_vote_penalty = low_points // 2 
 
-        for uid in data["users"]:
+        for uid in list(data["users"].keys()):
             user = data["users"][uid]
-            vote = votes.get(str(uid))  # Ensure it reads the ID as a string for JSON
+            
+            # --- THE BULLETPROOF ID CHECK ---
+            vote = votes.get(uid)
+            if vote is None:
+                vote = votes.get(str(uid))
+            if vote is None:
+                try:
+                    vote = votes.get(int(uid))
+                except:
+                    pass
 
             # 1. NO VOTE LOGIC
             if vote is None:
@@ -287,9 +297,9 @@ async def update_result(update, context):
             pts = int(pts_str)
 
             if team == winner:
-                user["points"] += pts        # Correct: Give the exact points they risked
+                user["points"] += pts
             else:
-                user["points"] -= (pts // 2) # Wrong: Deduct half of what they risked
+                user["points"] -= (pts // 2)
 
         poll["updated"] = True
         save_data(data)
@@ -317,7 +327,7 @@ async def undo_update(update, context):
             match_no = str(context.args[0])
             prev_winner = context.args[1].upper()
         except:
-            await update.message.reply_text("Usage: /undo 53 SRH (use the team you previously marked as winner)")
+            await update.message.reply_text("Usage: /undo 53 SRH")
             return
 
         data = load_data()
@@ -335,18 +345,26 @@ async def undo_update(update, context):
         options = poll["options"]
         votes = poll["votes"]
 
-        # --- MATCHING THE LOGIC ---
-        # Read the 3rd option to find what the penalty was
+        # Dynamic Math
         low_points = int(options[2].split()[1])
         no_vote_penalty = low_points // 2 
 
-        for uid in data["users"]:
+        for uid in list(data["users"].keys()):
             user = data["users"][uid]
-            vote = votes.get(str(uid))  # Ensure string matching for JSON
+            
+            # --- THE BULLETPROOF ID CHECK ---
+            vote = votes.get(uid)
+            if vote is None:
+                vote = votes.get(str(uid))
+            if vote is None:
+                try:
+                    vote = votes.get(int(uid))
+                except:
+                    pass
 
             # 1. REVERSE NO VOTE PENALTY
             if vote is None:
-                user["points"] += no_vote_penalty  # Give the penalty back
+                user["points"] += no_vote_penalty  
                 continue
 
             # 2. REVERSE VOTE CALCULATIONS
@@ -355,9 +373,9 @@ async def undo_update(update, context):
             pts = int(pts_str)
 
             if team == prev_winner:
-                user["points"] -= pts        # Reverse Correct: Take away the winnings
+                user["points"] -= pts        
             else:
-                user["points"] += (pts // 2) # Reverse Wrong: Give back the lost points
+                user["points"] += (pts // 2) 
 
         poll["updated"] = False
         save_data(data)
