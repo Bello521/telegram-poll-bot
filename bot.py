@@ -573,6 +573,98 @@ async def error_handler(update, context):
         except:
             pass
 
+# ================== RETRO FIX (BULK BATCH PROCESSING) ==================
+
+async def retro_fix(update, context):
+    try:
+        # 1. Security Check
+        if update.effective_user.id not in ADMIN_IDS:
+            return
+
+        # 2. Parse arguments (Now accepts unlimited User IDs!)
+        if len(context.args) < 4:
+            await update.message.reply_text(
+                "Usage: /retrofix [Match_No] [Voted_Team] [Actual_Winner] [User1] [User2] ...\n"
+                "Example: /retrofix 53 KKR KKR 12345678 87654321 11223344"
+            )
+            return
+
+        match_no = str(context.args[0])
+        voted_team = context.args[1].upper()
+        winner = context.args[2].upper()
+        user_ids = context.args[3:] # Grabs every ID you pasted after the teams!
+
+        data = load_data()
+
+        if match_no not in data["polls"]:
+            await update.message.reply_text("Invalid match.")
+            return
+
+        poll = data["polls"][match_no]
+        options = poll["options"]
+
+        # 3. Find the matching option
+        target_option_index = None
+        for i, opt in enumerate(options):
+            if opt.startswith(voted_team):
+                target_option_index = i
+                break 
+
+        if target_option_index is None:
+            await update.message.reply_text(f"Team {voted_team} not found in poll options.")
+            return
+
+        # 4. Calculate Points
+        low_points = int(options[2].split()[1])
+        no_vote_penalty = low_points // 2 
+        
+        option_text = options[target_option_index]
+        team, pts_str = option_text.split()
+        pts = int(pts_str)
+
+        results = []
+        import pymongo 
+        
+        # 5. Loop through every ID you provided
+        for uid in user_ids:
+            if uid not in data["users"]:
+                results.append(f"❌ ID {uid} not found in database.")
+                continue
+                
+            user = data["users"][uid]
+            
+            # Reverse the unfair penalty
+            user["points"] += no_vote_penalty 
+
+            # Apply the correct points dynamically
+            if team == winner:
+                user["points"] += pts
+                pts_diff = f"+{pts} (Won)"
+            else:
+                user["points"] -= (pts // 2)
+                pts_diff = f"-{pts // 2} (Lost)"
+
+            # Inject the vote safely into MongoDB
+            collection.update_one(
+                {"_id": "main"},
+                {"$set": {
+                    f"payload.polls.{match_no}.votes.{uid}": target_option_index,
+                    f"payload.users.{uid}.points": user["points"]
+                }}
+            )
+            
+            results.append(f"✅ <b>{user['name']}</b>: Penalty Fixed (+{no_vote_penalty}) | Vote {pts_diff}")
+
+        # 6. Send Leaderboard and Report
+        await send_leaderboard(context)
+        
+        report = f"🔧 <b>Bulk Retrofix Complete (Match {match_no})</b>\n\n" + "\n".join(results)
+        await update.message.reply_text(report, parse_mode="HTML")
+
+    except Exception as e:
+        await update.message.reply_text(f"Retrofix Error: {e}")
+
+
 # ================== MAIN ==================
 
 def main():
@@ -587,6 +679,7 @@ def main():
     app.add_handler(CommandHandler("backup", backup))
     app.add_handler(CommandHandler("checkvote", check_vote))
     app.add_handler(CommandHandler("missingvotes", missing_votes)) # NEW COMMAND
+    app.add_handler(CommandHandler("retrofix", retro_fix))
     app.add_handler(PollAnswerHandler(handle_vote))
     app.add_error_handler(error_handler) # THIS WILL NOW MESSAGE YOU IF IT CRASHES
 
