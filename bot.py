@@ -252,51 +252,44 @@ async def update_result(update, context):
             return
 
         data = load_data()
+
         if match_no not in data["polls"]:
             await update.message.reply_text("Invalid match")
             return
 
         poll = data["polls"][match_no]
+
         if poll["updated"]:
-            await update.message.reply_text("Already updated. Use /undo first.")
+            await update.message.reply_text("Already updated.")
             return
 
-        # 1. Get match type from schedule to determine points/penalty
-        match_info = next((m for m in MATCH_SCHEDULE if m["match_no"] == match_no), None)
-        if not match_info:
-            await update.message.reply_text("Match not found in schedule.json")
-            return
-
-        if match_info["type"] == "normal":
-            high, low = 100, 50
-        elif match_info["type"] == "double":
-            high, low = 300, 150
-        else: # special/playoffs
-            high, low = 1000, 500
-
-        penalty = low // 2  # This is the 50% of low points logic
-        
         options = poll["options"]
         votes = poll["votes"]
 
+        # --- THE GENIUS PART ---
+        # We find the "low" points by looking at the 3rd option (index 2)
+        # E.g., if options[2] is "KKR 150", splitting it gives us "150"
+        low_points = int(options[2].split()[1])
+        no_vote_penalty = low_points // 2 
+
         for uid in data["users"]:
             user = data["users"][uid]
-            vote = votes.get(uid)
+            vote = votes.get(str(uid))  # Ensure it reads the ID as a string for JSON
 
-            # --- NO VOTE PENALTY ---
+            # 1. NO VOTE LOGIC
             if vote is None:
-                user["points"] -= penalty
+                user["points"] -= no_vote_penalty
                 continue
 
-            # --- CALCULATE WIN/LOSS ---
+            # 2. VOTE CALCULATIONS
             option_text = options[vote]
-            team, _ = option_text.split()
-            pts = high if vote < 2 else low
+            team, pts_str = option_text.split()
+            pts = int(pts_str)
 
             if team == winner:
-                user["points"] += pts
+                user["points"] += pts        # Correct: Give the exact points they risked
             else:
-                user["points"] -= pts // 2
+                user["points"] -= (pts // 2) # Wrong: Deduct half of what they risked
 
         poll["updated"] = True
         save_data(data)
@@ -307,10 +300,12 @@ async def update_result(update, context):
             pass
 
         await send_leaderboard(context)
-        await update.message.reply_text(f"✅ Match {match_no} ({match_info['type'].upper()}) updated.\nPenalty applied: -{penalty}")
+        await update.message.reply_text(f"✅ Match {match_no} updated successfully!\nNo-vote penalty applied: -{no_vote_penalty}")
 
     except Exception:
+        import traceback
         traceback.print_exc()
+
 # =============== UNDO_UPDATE ===================
 
 async def undo_update(update, context):
@@ -322,41 +317,53 @@ async def undo_update(update, context):
             match_no = str(context.args[0])
             prev_winner = context.args[1].upper()
         except:
-            await update.message.reply_text("Usage: /undo 53 SRH (use the team you originally updated as winner)")
+            await update.message.reply_text("Usage: /undo 53 SRH (use the team you previously marked as winner)")
             return
 
         data = load_data()
-        poll = data["polls"].get(match_no)
 
-        if not poll or not poll["updated"]:
-            await update.message.reply_text("Nothing to undo.")
+        if match_no not in data["polls"]:
+            await update.message.reply_text("Invalid match")
+            return
+
+        poll = data["polls"][match_no]
+
+        if not poll["updated"]:
+            await update.message.reply_text("This match hasn't been updated yet.")
             return
 
         options = poll["options"]
         votes = poll["votes"]
 
+        # --- MATCHING THE LOGIC ---
+        # Read the 3rd option to find what the penalty was
+        low_points = int(options[2].split()[1])
+        no_vote_penalty = low_points // 2 
+
         for uid in data["users"]:
             user = data["users"][uid]
-            vote = votes.get(uid)
+            vote = votes.get(str(uid))  # Ensure string matching for JSON
 
-            # EXACT REVERSE OF YOUR OLD LOGIC
+            # 1. REVERSE NO VOTE PENALTY
             if vote is None:
-                user["points"] += 25  # Gives back the exact 25 penalty
+                user["points"] += no_vote_penalty  # Give the penalty back
                 continue
 
+            # 2. REVERSE VOTE CALCULATIONS
             option_text = options[vote]
-            team, pts = option_text.split()
-            pts = int(pts)  # Uses the exact points written on the poll (100/50)
+            team, pts_str = option_text.split()
+            pts = int(pts_str)
 
             if team == prev_winner:
-                user["points"] -= pts
+                user["points"] -= pts        # Reverse Correct: Take away the winnings
             else:
-                user["points"] += pts // 2
+                user["points"] += (pts // 2) # Reverse Wrong: Give back the lost points
 
         poll["updated"] = False
         save_data(data)
+
         await send_leaderboard(context)
-        await update.message.reply_text(f"♻️ Match {match_no} reverted using OLD logic. Math is now perfect.")
+        await update.message.reply_text(f"♻️ Match {match_no} undone!\nReversed no-vote penalty: +{no_vote_penalty}")
 
     except Exception:
         import traceback
