@@ -16,8 +16,6 @@ from telegram.ext import (
     PollAnswerHandler
 )
 
-vote_lock = asyncio.Lock()
-
 # Load environment variables (from .env locally, or Render Dashboard)
 load_dotenv()
 
@@ -202,7 +200,7 @@ async def close_poll_auto(context, match):
 
 async def scheduler(context):
     try:
-        # print("🔁 Scheduler running") # You can comment this out so it stops spamming your console!
+        # print("🔁 Scheduler running") 
         for match in MATCH_SCHEDULE:
             await create_poll_auto(context, match)
             await close_poll_auto(context, match)
@@ -213,40 +211,49 @@ async def scheduler(context):
 # ================== HANDLE VOTES ==================
 
 async def handle_vote(update, context):
-    # The lock prevents the race condition
-    async with vote_lock: 
-        # Notice how 'try' is pushed inward 4 spaces!
-        try:
-            answer = update.poll_answer
-            poll_id = answer.poll_id
-            user = answer.user
-            data = load_data()
+    try:
+        answer = update.poll_answer
+        poll_id = answer.poll_id
+        user = answer.user
+        uid_str = str(user.id)
 
-            for match_no, poll in data["polls"].items():
-                if poll["poll_id"] == poll_id:
-                    # Check if user exists in database
-                    if str(user.id) not in data["users"]:
-                        data["users"][str(user.id)] = {
-                            "name": user.first_name,
-                            "points": 0
-                        }
+        # 1. Find target match
+        data = load_data()
+        target_match = None
+        for match_no, poll in data["polls"].items():
+            if poll["poll_id"] == poll_id:
+                target_match = match_no
+                break
 
-                    # Record or remove their vote
-                    if answer.option_ids:
-                        poll["votes"][str(user.id)] = answer.option_ids[0]
-                    else:
-                        poll["votes"].pop(str(user.id), None)
+        if not target_match:
+            return 
 
-                    # Save database
-                    save_data(data)
-                    print(f"🗳 Vote recorded for {user.first_name}")
-                    return
-                    
-        except Exception:
-            # Notice how 'except' lines up perfectly underneath 'try'
-            print("❌ VOTE ERROR")
-            import traceback
-            traceback.print_exc()
+        # 2. Add user if they are new
+        if uid_str not in data["users"]:
+            data["users"][uid_str] = {
+                "name": user.first_name,
+                "points": 0
+            }
+            save_data(data) 
+
+        # 3. ATOMIC MONGODB UPDATE (Race Condition Killer)
+        if answer.option_ids:
+            vote_val = answer.option_ids[0]
+            collection.update_one(
+                {"_id": "main"},
+                {"$set": {f"payload.polls.{target_match}.votes.{uid_str}": vote_val}}
+            )
+            print(f"🗳 Vote recorded for {user.first_name} (Atomic)")
+        else:
+            collection.update_one(
+                {"_id": "main"},
+                {"$unset": {f"payload.polls.{target_match}.votes.{uid_str}": ""}}
+            )
+            print(f"🗳 Vote retracted for {user.first_name} (Atomic)")
+
+    except Exception:
+        print("❌ VOTE ERROR")
+        traceback.print_exc()
 
 # ================== UPDATE RESULT ==================
 
@@ -277,11 +284,9 @@ async def update_result(update, context):
         options = poll["options"]
         votes = poll["votes"]
 
-        # --- DIAGNOSTIC PRINT 1 ---
         print(f"\n🔍 DEBUG MATCH {match_no}:")
         print(f"Total votes in database for this match: {len(votes)}")
         print(f"Raw Votes Dictionary: {votes}\n")
-        # --------------------------
 
         low_points = int(options[2].split()[1])
         no_vote_penalty = low_points // 2 
@@ -301,9 +306,7 @@ async def update_result(update, context):
 
             # NO VOTE LOGIC
             if vote is None:
-                # --- DIAGNOSTIC PRINT 2 ---
                 print(f"❌ NO VOTE FOUND FOR: {user.get('name', 'Unknown')} (ID: '{uid}')")
-                # --------------------------
                 user["points"] -= no_vote_penalty
                 continue
 
@@ -326,10 +329,9 @@ async def update_result(update, context):
             pass
 
         await send_leaderboard(context)
-        await update.message.reply_text(f"✅ Match {match_no} updated! (Check Render logs for debug info)")
+        await update.message.reply_text(f"✅ Match {match_no} updated!")
 
     except Exception:
-        import traceback
         traceback.print_exc()
 
 
@@ -401,7 +403,6 @@ async def undo_update(update, context):
         await update.message.reply_text(f"♻️ Match {match_no} undone!\nReversed no-vote penalty: +{no_vote_penalty}")
 
     except Exception:
-        import traceback
         traceback.print_exc()
 
 # ================== LEADERBOARD ==================
@@ -472,18 +473,7 @@ async def backup(update, context):
         print("❌ BACKUP ERROR")
         traceback.print_exc()
 
-# ================== ERROR HANDLER ==================
-
-async def error_handler(update, context):
-    print("\n❌ TELEGRAM ERROR ❌\n")
-    traceback.print_exception(
-        type(context.error),
-        context.error,
-        context.error.__traceback__
-    )
-    print("\n❌ END ERROR ❌\n")
-
-#======================= check vote============
+#======================= CHECK VOTE ============
 
 async def check_vote(update, context):
     try:
@@ -515,6 +505,73 @@ async def check_vote(update, context):
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
+# ================== MISSING VOTES ==================
+
+async def missing_votes(update, context):
+    try:
+        if update.effective_user.id not in ADMIN_IDS:
+            return
+
+        try:
+            match_no = str(context.args[0])
+        except:
+            await update.message.reply_text("Usage: /missingvotes 53")
+            return
+
+        data = load_data()
+
+        if match_no not in data["polls"]:
+            await update.message.reply_text(f"Match {match_no} not found in database.")
+            return
+
+        poll = data["polls"][match_no]
+        votes = poll.get("votes", {})
+        
+        missing_players = []
+
+        for uid, user_info in data["users"].items():
+            vote = votes.get(uid)
+            if vote is None:
+                vote = votes.get(str(uid))
+            if vote is None:
+                try:
+                    vote = votes.get(int(uid))
+                except:
+                    pass
+
+            if vote is None:
+                name = user_info.get("name", "Unknown")
+                missing_players.append(f"• {name} (ID: {uid})")
+
+        if not missing_players:
+            await update.message.reply_text(f"✅ Match {match_no}: Every player on the leaderboard has a vote recorded!")
+        else:
+            report = f"❌ Match {match_no} Missing Votes ({len(missing_players)} players):\n\n"
+            report += "\n".join(missing_players)
+            await update.message.reply_text(report)
+
+    except Exception as e:
+        await update.message.reply_text(f"Error checking missing votes: {e}")
+
+# ================== ERROR HANDLER ==================
+
+async def error_handler(update, context):
+    print("\n❌ TELEGRAM ERROR ❌\n")
+    traceback.print_exception(
+        type(context.error),
+        context.error,
+        context.error.__traceback__
+    )
+    print("\n❌ END ERROR ❌\n")
+    
+    # Send error right to Telegram if an Admin ID is set!
+    if ADMIN_IDS:
+        import html
+        error_msg = f"⚠️ <b>BOT ERROR</b> ⚠️\n<pre>{html.escape(str(context.error))}</pre>"
+        try:
+            await context.bot.send_message(chat_id=ADMIN_IDS[0], text=error_msg, parse_mode="HTML")
+        except:
+            pass
 
 # ================== MAIN ==================
 
@@ -528,9 +585,10 @@ def main():
     app.add_handler(CommandHandler("leaderboard", leaderboard))
     app.add_handler(CommandHandler("ping", ping))
     app.add_handler(CommandHandler("backup", backup))
-    app.add_handler(PollAnswerHandler(handle_vote))
-    app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("checkvote", check_vote))
+    app.add_handler(CommandHandler("missingvotes", missing_votes)) # NEW COMMAND
+    app.add_handler(PollAnswerHandler(handle_vote))
+    app.add_error_handler(error_handler) # THIS WILL NOW MESSAGE YOU IF IT CRASHES
 
     app.job_queue.run_repeating(scheduler, interval=10, first=5)
     app.job_queue.run_repeating(keep_alive, interval=300, first=10)
