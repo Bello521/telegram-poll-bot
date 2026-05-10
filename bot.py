@@ -322,7 +322,7 @@ async def undo_update(update, context):
             match_no = str(context.args[0])
             prev_winner = context.args[1].upper()
         except:
-            await update.message.reply_text("Usage: /undo 53 SRH")
+            await update.message.reply_text("Usage: /undo 53 SRH (use the team you originally updated as winner)")
             return
 
         data = load_data()
@@ -332,16 +332,6 @@ async def undo_update(update, context):
             await update.message.reply_text("Nothing to undo.")
             return
 
-        match_info = next((m for m in MATCH_SCHEDULE if m["match_no"] == match_no), None)
-        if match_info["type"] == "normal":
-            high, low = 100, 50
-        elif match_info["type"] == "double":
-            high, low = 300, 150
-        else:
-            high, low = 1000, 500
-
-        penalty = low // 2
-        
         options = poll["options"]
         votes = poll["votes"]
 
@@ -349,13 +339,14 @@ async def undo_update(update, context):
             user = data["users"][uid]
             vote = votes.get(uid)
 
+            # EXACT REVERSE OF YOUR OLD LOGIC
             if vote is None:
-                user["points"] += penalty
+                user["points"] += 25  # Gives back the exact 25 penalty
                 continue
 
             option_text = options[vote]
-            team, _ = option_text.split()
-            pts = high if vote < 2 else low
+            team, pts = option_text.split()
+            pts = int(pts)  # Uses the exact points written on the poll (100/50)
 
             if team == prev_winner:
                 user["points"] -= pts
@@ -364,9 +355,11 @@ async def undo_update(update, context):
 
         poll["updated"] = False
         save_data(data)
-        await update.message.reply_text(f"♻️ Match {match_no} reverted. Leaderboard fixed.")
+        await send_leaderboard(context)
+        await update.message.reply_text(f"♻️ Match {match_no} reverted using OLD logic. Math is now perfect.")
 
     except Exception:
+        import traceback
         traceback.print_exc()
 
 # ================== LEADERBOARD ==================
@@ -456,6 +449,7 @@ def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("update", update_result))
+    app.add_handler(CommandHandler("undo", undo_update))
     app.add_handler(CommandHandler("leaderboard", leaderboard))
     app.add_handler(CommandHandler("ping", ping))
     app.add_handler(CommandHandler("backup", backup))
