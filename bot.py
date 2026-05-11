@@ -228,13 +228,15 @@ async def handle_vote(update, context):
         if not target_match:
             return 
 
-        # 2. Add user if they are new
+        # 2. Add user if they are new (Using ATOMIC MONGODB so it doesn't wipe others!)
         if uid_str not in data["users"]:
-            data["users"][uid_str] = {
-                "name": user.first_name,
-                "points": 0
-            }
-            save_data(data) 
+            collection.update_one(
+                {"_id": "main"},
+                {"$set": {f"payload.users.{uid_str}": {
+                    "name": user.first_name,
+                    "points": 0
+                }}}
+            )
 
         # 3. ATOMIC MONGODB UPDATE (Race Condition Killer)
         if answer.option_ids:
@@ -253,6 +255,7 @@ async def handle_vote(update, context):
 
     except Exception:
         print("❌ VOTE ERROR")
+        import traceback
         traceback.print_exc()
 
 # ================== UPDATE RESULT ==================
@@ -573,8 +576,6 @@ async def error_handler(update, context):
         except:
             pass
 
-# ================== RETRO FIX (BULK BATCH PROCESSING) ==================
-
 # ================== RETRO FIX (BULK BATCH PROCESSING - FIXED) ==================
 
 async def retro_fix(update, context):
@@ -672,6 +673,8 @@ async def retro_fix(update, context):
 
 # ================== MAIN ==================
 
+# ================== MAIN ==================
+
 def main():
     print("🔥 BOT STARTING")
 
@@ -683,10 +686,10 @@ def main():
     app.add_handler(CommandHandler("ping", ping))
     app.add_handler(CommandHandler("backup", backup))
     app.add_handler(CommandHandler("checkvote", check_vote))
-    app.add_handler(CommandHandler("missingvotes", missing_votes)) # NEW COMMAND
-    app.add_handler(CommandHandler("retrofix", retro_fix))
+    app.add_handler(CommandHandler("missingvotes", missing_votes)) 
+    app.add_handler(CommandHandler("retrofix", retro_fix)) # Ensure retrofix is registered!
     app.add_handler(PollAnswerHandler(handle_vote))
-    app.add_error_handler(error_handler) # THIS WILL NOW MESSAGE YOU IF IT CRASHES
+    app.add_error_handler(error_handler) 
 
     app.job_queue.run_repeating(scheduler, interval=10, first=5)
     app.job_queue.run_repeating(keep_alive, interval=300, first=10)
@@ -702,11 +705,11 @@ def main():
             port=PORT,
             url_path="webhook",
             webhook_url=WEBHOOK_URL,
-            drop_pending_updates=True
+            drop_pending_updates=False # <--- CHANGED TO FALSE! This saves your votes!
         )
     else:
         print("🚀 STARTING POLLING MODE (Local Fallback)")
-        app.run_polling(drop_pending_updates=True)
+        app.run_polling(drop_pending_updates=False) # <--- CHANGED TO FALSE!
 
 if __name__ == "__main__":
     main()
