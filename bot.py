@@ -512,9 +512,11 @@ async def check_vote(update, context):
 
 async def missing_votes(update, context):
     try:
+        # 1. Security Check
         if update.effective_user.id not in ADMIN_IDS:
             return
 
+        # 2. Get Match Number
         try:
             match_no = str(context.args[0])
         except:
@@ -523,6 +525,7 @@ async def missing_votes(update, context):
 
         data = load_data()
 
+        # 3. Validation
         if match_no not in data["polls"]:
             await update.message.reply_text(f"Match {match_no} not found in database.")
             return
@@ -532,7 +535,9 @@ async def missing_votes(update, context):
         
         missing_players = []
 
+        # 4. Check every user on the leaderboard
         for uid, user_info in data["users"].items():
+            # Use the Bulletproof check
             vote = votes.get(uid)
             if vote is None:
                 vote = votes.get(str(uid))
@@ -544,14 +549,22 @@ async def missing_votes(update, context):
 
             if vote is None:
                 name = user_info.get("name", "Unknown")
-                missing_players.append(f"• {name} (ID: {uid})")
+                
+                # Creates a clickable, blue tag that notifies the user
+                tag = f'<a href="tg://user?id={uid}">{name}</a>'
+                
+                # Appends the name tag and formats the ID to be tap-to-copy
+                missing_players.append(f"• {tag} (<code>{uid}</code>)")
 
+        # 5. Send Report
         if not missing_players:
             await update.message.reply_text(f"✅ Match {match_no}: Every player on the leaderboard has a vote recorded!")
         else:
-            report = f"❌ Match {match_no} Missing Votes ({len(missing_players)} players):\n\n"
+            report = f"❌ <b>Match {match_no} Missing Votes</b> ({len(missing_players)} players):\n\n"
             report += "\n".join(missing_players)
-            await update.message.reply_text(report)
+            
+            # Send in HTML mode so the tags and copyable IDs render correctly
+            await update.message.reply_text(report, parse_mode="HTML")
 
     except Exception as e:
         await update.message.reply_text(f"Error checking missing votes: {e}")
